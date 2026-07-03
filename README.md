@@ -1,9 +1,9 @@
-# Island Grid — Singapore Energy IoT Story Animation
+# Island Grid — Singapore Energy 3D Story Animation
 
-A single-file cinematic story demo for a Singapore-based renewable-energy IoT company:
-the camera flies across Singapore, lights up Changi Airport T3 with a live HVAC
-optimization panel, reveals 11 client assets, weaves them into an island-wide energy
-network, and lands on an outcomes card.
+A fully animated, sci-fi styled 3D story (three.js + bloom post-processing) for a
+Singapore-based renewable-energy IoT company. Neon wireframe Singapore coastline,
+glowing tower assets, particle energy flows, cinematic text captions — **no stats,
+no dashboards, pure narrative animation**.
 
 ## Run
 
@@ -12,27 +12,28 @@ python3 -m http.server 8000
 # open http://localhost:8000/index.html
 ```
 
-(Or just double-click `index.html` — everything is inline; only the map tiles and
-MapLibre CDN need network access.)
+Needs network access only for the three.js CDN. `coast.js` (real OSM coastline of
+Singapore Island, simplified) is bundled locally.
 
-## Storyline (66 s auto-play)
+## The animation (~55 s, then endless slow orbit)
 
-| # | Scene | What happens |
-|---|-------|--------------|
-| 1 | Intro | Island overview, brand title fades in |
-| 2 | Changi HVAC | Fly to T3, building blooms, live ops panel (flights/hr, pax flow, chiller kW, setpoint, AI knowledge-topology graph) |
-| 3 | Algorithm | Convergence chart: jittery baseline → optimized curve, savings count-up |
-| 4 | Constellation | Pull up; 11 client assets light up one by one |
-| 5 | Network | Energy arcs shoot from Changi to every asset, flowing dashes |
-| 6 | Outcomes | Stats count-up + client wall (Changi, DBS, OCBC, HTX, MSE, NGS, ST Engg, HDB, PSA, Frasers, WITH) |
+| Phase | What happens |
+|-------|--------------|
+| Outline | Neon coastline draws itself over a dark grid; brand title |
+| City | Hundreds of dark city blocks rise from the island |
+| Changi | Camera dives to Changi; an amber beacon ignites with orbiting fireflies; captions about real-time HVAC retuning |
+| Assets | Pull back; client towers ignite one by one with name labels (fanned out around the CBD cluster) |
+| Fabric | Violet energy arcs shoot from Changi to every asset; particles flow along them |
+| Finale | Slow hero orbit; tagline + client name wall (text only); Replay |
 
-Controls: prev / play-pause / next, scene dots, Replay, and **Explore map** (frees the camera).
+Controls: `Skip ▸▸` (bottom-right) advances a phase; `Replay` restarts.
 
 ## Customize
 
-- **Brand**: edit the `#intro` block (`ISLAND GRID` placeholder) and `<title>`.
-- **Sites / outcomes**: the `SITES` and `OUTCOMES` constants at the top of the script.
-- **Basemap**: currently MapLibre + OpenFreeMap dark (no token needed). To use Mapbox,
-  swap the script/CSS includes for mapbox-gl, set `mapboxgl.accessToken`, and change the
-  `style` URL — the camera/layer API is compatible.
-- **Timings**: each scene's `dur` in the `SCENES` array.
+- **Brand**: the `#title` block (`ISLAND GRID` placeholder) and `<title>`.
+- **Sites**: the `SITES` constant (org label, lng/lat, tower height).
+- **Captions**: the `CAPS` object — all narrative text lives there.
+- **Pacing**: each phase's `dur` in the `PHASES` array.
+- **Look**: bloom parameters (`UnrealBloomPass`), colors in `:root` CSS and materials.
+
+`map-story.html` is the earlier MapLibre map-based 6-scene version, kept for reference.
