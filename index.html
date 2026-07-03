@@ -455,7 +455,7 @@ const PHASES = [
         // real towers of the CBD clients light up cyan
         for (const k of ["dbs", "ocbc", "ngs", "frasers", "with"]) {
           const s = SITES.find((x) => x.key === k);
-          lightBuildingsAt(s.coords, "cyan", 55, 90);
+          lightBuildingsAt(s.coords, "cyan", 90, 140);
           setSiteOn(s.id, true);
         }
         sitesOn = 6;
