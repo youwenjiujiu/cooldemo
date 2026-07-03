@@ -28,7 +28,7 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 .maplibregl-ctrl-attrib { background: rgba(5,8,13,.5) !important; }
 .maplibregl-ctrl-attrib a { color: #5a6b78 !important; font-size: 10px; }
 #vignette { position: absolute; inset: 0; pointer-events: none; z-index: 5;
-  box-shadow: inset 0 0 320px 90px rgba(0,0,0,.85); }
+  box-shadow: inset 0 0 220px 40px rgba(0,0,0,.45); }
 
 /* title */
 #title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -153,6 +153,36 @@ const SITES = [
   { id: 9,  key: "stengg",  org: "ST Engineering",  coords: [103.8510, 1.3790] },
   { id: 10, key: "htx",     org: "HTX",             coords: [103.7880, 1.3070] },
 ];
+// mock portfolio spread across the whole island (visual scale; not real clients)
+const MOCK_SITES = [
+  { org: "Tuas Mega Port",             coords: [103.6480, 1.2830] },
+  { org: "Jurong Island Energy Hub",   coords: [103.7000, 1.2660] },
+  { org: "Jurong Logistics Campus",    coords: [103.7430, 1.3340] },
+  { org: "NTU Smart Campus",           coords: [103.6830, 1.3480] },
+  { org: "Tengah Eco Town",            coords: [103.7160, 1.3740] },
+  { org: "Kranji AgriTech Park",       coords: [103.7620, 1.4250] },
+  { org: "Woodlands Health Campus",    coords: [103.7860, 1.4370] },
+  { org: "Sembawang Shipyard",         coords: [103.8200, 1.4490] },
+  { org: "Yishun Community Hub",       coords: [103.8350, 1.4290] },
+  { org: "Mandai Wildlife Reserve",    coords: [103.7890, 1.4040] },
+  { org: "Seletar Aerospace Park",     coords: [103.8670, 1.4100] },
+  { org: "Punggol Digital District",   coords: [103.9060, 1.4050] },
+  { org: "Sengkang Grid Cluster",      coords: [103.8950, 1.3920] },
+  { org: "Pasir Ris Central",          coords: [103.9490, 1.3730] },
+  { org: "Tampines Regional Centre",   coords: [103.9450, 1.3540] },
+  { org: "Changi Business Park",       coords: [103.9640, 1.3340] },
+  { org: "Expo & Convention Centre",   coords: [103.9610, 1.3350] },
+  { org: "Bedok Integrated Complex",   coords: [103.9300, 1.3240] },
+  { org: "Paya Lebar Quarter",         coords: [103.8930, 1.3180] },
+  { org: "Kallang Sports Hub",         coords: [103.8740, 1.3040] },
+  { org: "Orchard Retail Belt",        coords: [103.8320, 1.3040] },
+  { org: "one-north Innovation Park",  coords: [103.7870, 1.2990] },
+  { org: "Mapletree Business City",    coords: [103.7990, 1.2760] },
+  { org: "Sentosa Resorts",            coords: [103.8300, 1.2490] },
+].map((m, i) => ({ ...m, id: SITES.length + i, key: "mock" + i, tier: "mock" }));
+SITES.forEach((s) => { s.tier = "hero"; });
+const ALL_SITES = [...SITES, ...MOCK_SITES];
+
 const CHANGI = SITES[0].coords;
 const CHANGI_TERMINALS = [103.9885, 1.3590]; // T1/T3 building cluster, for close-up lighting
 const CBD = [103.8500, 1.2825];
@@ -190,7 +220,7 @@ const BLD = USE_MAPBOX
       font: ["Noto Sans Regular"] };
 const map = new GL.Map({
   container: "map",
-  style: USE_MAPBOX ? "mapbox://styles/mapbox/dark-v11" : "https://tiles.openfreemap.org/styles/dark",
+  style: USE_MAPBOX ? "mapbox://styles/mapbox/navigation-night-v1" : "https://tiles.openfreemap.org/styles/dark",
   center: [103.8400, 1.3250],
   zoom: 10.6,
   pitch: 45,
@@ -215,8 +245,8 @@ function arcCoords(h, a, steps = 56) {
 // island-wide mesh: every asset links to its nearest neighbours — a web, not a hub
 const MESH_EDGES = (() => {
   const edges = [], seen = new Set();
-  SITES.forEach((s, i) => {
-    SITES.map((t, j) => ({ j, d: Math.hypot(t.coords[0] - s.coords[0], t.coords[1] - s.coords[1]) }))
+  ALL_SITES.forEach((s, i) => {
+    ALL_SITES.map((t, j) => ({ j, d: Math.hypot(t.coords[0] - s.coords[0], t.coords[1] - s.coords[1]) }))
       .filter((x) => x.j !== i)
       .sort((a, b) => a.d - b.d)
       .slice(0, 2)
@@ -227,7 +257,7 @@ const MESH_EDGES = (() => {
   });
   return edges;
 })();
-const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(SITES[a].coords, SITES[b].coords));
+const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(ALL_SITES[a].coords, ALL_SITES[b].coords));
 
 /* --- real 3D buildings; lit state via feature-state ("amber" | "cyan") --- */
 let litFeatures = [], litSeen = new Set();
@@ -237,7 +267,7 @@ function setupLayers() {
     id: "bld-3d", type: "fill-extrusion", source: BLD.source, "source-layer": BLD.layer,
     minzoom: BLD.minzoom,
     paint: {
-      "fill-extrusion-color": "#0e1b28",
+      "fill-extrusion-color": "#31465e",
       "fill-extrusion-height": BLD.height,
       "fill-extrusion-base": BLD.base,
       "fill-extrusion-opacity": 0.92,
@@ -253,7 +283,7 @@ function setupLayers() {
     id: "lit-bld-3d", type: "fill-extrusion", source: "lit-bld",
     paint: {
       "fill-extrusion-color": ["match", ["get", "tone"],
-        "amber", "#e8a13c", "#36f2e2"],
+        "amber", "#f0a832", "#49ffef"],
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-base": ["get", "b"],
       "fill-extrusion-opacity": 0.98,
@@ -262,27 +292,30 @@ function setupLayers() {
 
   map.addSource("sites", { type: "geojson", data: {
     type: "FeatureCollection",
-    features: SITES.map((s) => ({ type: "Feature", id: s.id,
-      properties: { label: s.org }, geometry: { type: "Point", coordinates: s.coords } })),
+    features: ALL_SITES.map((s) => ({ type: "Feature", id: s.id,
+      properties: { label: s.org, tier: s.tier },
+      geometry: { type: "Point", coordinates: s.coords } })),
   }});
   const onState = ["boolean", ["feature-state", "on"], false];
+  const isHero = ["==", ["get", "tier"], "hero"];
   map.addLayer({ id: "site-pulse", type: "circle", source: "sites",
     paint: { "circle-radius": 0, "circle-color": "#38e1d6", "circle-opacity": 0,
       "circle-blur": 0.6, "circle-pitch-alignment": "map" } });
   map.addLayer({ id: "site-core", type: "circle", source: "sites",
     paint: {
-      "circle-radius": ["case", onState, 5, 0],
-      "circle-color": "#38e1d6",
-      "circle-stroke-color": "#eaffff", "circle-stroke-width": ["case", onState, 1, 0],
+      "circle-radius": ["case", onState, ["case", isHero, 5, 3.5], 0],
+      "circle-color": ["case", isHero, "#38e1d6", "#2fb9b0"],
+      "circle-stroke-color": "#eaffff", "circle-stroke-width": ["case", onState, ["case", isHero, 1, 0.5], 0],
       "circle-opacity": ["case", onState, 1, 0],
     } });
   map.addLayer({ id: "site-label", type: "symbol", source: "sites",
-    layout: { "text-field": ["get", "label"], "text-size": 12,
+    layout: { "text-field": ["get", "label"],
+      "text-size": ["case", isHero, 12, 10],
       "text-variable-anchor": ["top", "bottom", "left", "right"],
       "text-radial-offset": 1.0, "text-justify": "auto",
       "text-font": BLD.font },
     paint: { "text-color": "#eaf6f8", "text-halo-color": "#05080d", "text-halo-width": 1.5,
-      "text-opacity": ["case", onState, 0.95, 0] } });
+      "text-opacity": ["case", onState, ["case", isHero, 0.95, 0.7], 0] } });
 
   map.addSource("arcs", { type: "geojson", lineMetrics: true,
     data: { type: "FeatureCollection", features: [] } });
@@ -368,9 +401,17 @@ function tickDashFlow(now) {
 }
 
 let sitesOn = 0;
+const litSites = new Set();
 const setSiteOn = (i, on) => map.setFeatureState({ source: "sites", id: i }, { on });
-const allSitesOn = () => { SITES.forEach((s) => setSiteOn(s.id, true)); sitesOn = SITES.length; };
-const allSitesOff = () => { SITES.forEach((s) => setSiteOn(s.id, false)); sitesOn = 0; };
+const igniteSite = (id) => {
+  if (litSites.has(id)) return;
+  litSites.add(id); setSiteOn(id, true); sitesOn = litSites.size;
+};
+const allSitesOn = () => ALL_SITES.forEach((s) => igniteSite(s.id));
+const allSitesOff = () => {
+  ALL_SITES.forEach((s) => setSiteOn(s.id, false));
+  litSites.clear(); sitesOn = 0;
+};
 
 function pinBloom(el, lngLat) {
   const p = map.project(lngLat);
@@ -426,7 +467,7 @@ const PHASES = [
         this._lit = true;
         lightBuildingsAt(CHANGI_TERMINALS, "amber", 260, 700);
         $("#bloom-changi").classList.add("on");
-        setSiteOn(0, true); sitesOn = 1;
+        igniteSite(0);
         loctag("Changi Airport · Terminal Three");
       }
       if (ms > 5600 && !this._orbit) {
@@ -456,9 +497,8 @@ const PHASES = [
         for (const k of ["dbs", "ocbc", "ngs", "frasers", "with"]) {
           const s = SITES.find((x) => x.key === k);
           lightBuildingsAt(s.coords, "cyan", 90, 140);
-          setSiteOn(s.id, true);
+          igniteSite(s.id);
         }
-        sitesOn = 6;
         $("#bloom-cbd").classList.add("on");
         loctag("Raffles Place · Marina Bay");
       }
@@ -472,7 +512,7 @@ const PHASES = [
     },
     exit() { captionOut(); loctag(""); $("#bloom-cbd").classList.remove("on"); } },
 
-  { name: "island", dur: 15000,
+  { name: "island", dur: 17000,
     enter() {
       map.stop();
       unlightBuildings();
@@ -485,12 +525,9 @@ const PHASES = [
       this._flow = false;
     },
     update(ms, now) {
-      // remaining assets ignite one by one on the real map
-      SITES.forEach((s, i) => {
-        if (i > 0 && ms > 2600 + i * 620 && s.id >= sitesOn) {
-          setSiteOn(s.id, true); sitesOn = s.id + 1;
-        }
-      });
+      // hero clients ignite one by one, then the mock portfolio sweeps the island
+      SITES.forEach((s, i) => { if (i > 0 && ms > 2600 + i * 520) igniteSite(s.id); });
+      MOCK_SITES.forEach((m, i) => { if (ms > 6400 + i * 160) igniteSite(m.id); });
       if (ms > 4400 && !this._c) { this._c = true; caption(CAPS.fabric); }
       if (ms > 5400 && !this._orbit) {
         this._orbit = true;
@@ -499,7 +536,7 @@ const PHASES = [
       // arcs shoot from Changi to every asset
       let changed = false;
       ARCS.forEach((_, i) => {
-        const p = clamp((ms - 5800 - i * 240) / 800, 0, 1);
+        const p = clamp((ms - 7600 - i * 120) / 700, 0, 1);
         const e = easeOut(p);
         if (e !== arcProgress[i]) { arcProgress[i] = e; changed = true; }
       });
@@ -564,9 +601,9 @@ function jumpTo(idx) {
   if (cur >= 0) PHASES[cur].exit();
   resetWorld();
   // world state each phase expects on entry (for skips/replay)
-  if (idx >= 2) { setSiteOn(0, true); sitesOn = 1; }
-  if (idx >= 3) { ["dbs","ocbc","ngs","frasers","with"].forEach((k) => {
-      setSiteOn(SITES.find((s) => s.key === k).id, true); }); sitesOn = 6; }
+  if (idx >= 2) igniteSite(0);
+  if (idx >= 3) ["dbs","ocbc","ngs","frasers","with"].forEach((k) =>
+    igniteSite(SITES.find((s) => s.key === k).id));
   if (idx >= 4) { allSitesOn(); arcProgress = ARCS.map(() => 1); setArcData();
     map.setPaintProperty("arc-flow", "line-opacity", 0.9); }
   playT = PHASES[idx].start;
