@@ -4,17 +4,21 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Island Grid — Singapore Energy Intelligence</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
 :root {
   --cyan: #38e1d6; --amber: #ffb84d; --violet: #8c9aff;
   --text: #eaf6f8; --muted: #7e93a3;
 }
-html, body { margin: 0; height: 100%; background: #020409; overflow: hidden;
+html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   font-family: "Space Grotesk", "Avenir Next", -apple-system, "Segoe UI", system-ui, sans-serif;
   color: var(--text); }
-canvas { display: block; }
-#vignette { position: absolute; inset: 0; pointer-events: none; z-index: 3;
-  box-shadow: inset 0 0 340px 100px rgba(0,0,0,.9); }
+#map { position: absolute; inset: 0; }
+.maplibregl-ctrl-attrib { background: rgba(5,8,13,.5) !important; }
+.maplibregl-ctrl-attrib a { color: #5a6b78 !important; font-size: 10px; }
+#vignette { position: absolute; inset: 0; pointer-events: none; z-index: 5;
+  box-shadow: inset 0 0 320px 90px rgba(0,0,0,.85); }
 
 /* title */
 #title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -29,25 +33,38 @@ canvas { display: block; }
 #title .sub b { color: var(--cyan); font-weight: 600; }
 
 /* cinematic captions */
-#caption { position: absolute; left: 50%; bottom: 11%; transform: translateX(-50%);
-  max-width: 860px; width: 90vw; text-align: center; z-index: 10; pointer-events: none; }
+#caption { position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%);
+  max-width: 880px; width: 92vw; text-align: center; z-index: 10; pointer-events: none; }
 #caption .line { font-size: clamp(17px, 2.1vw, 26px); font-weight: 500; letter-spacing: .06em;
   line-height: 1.5; color: var(--text); opacity: 0; transform: translateY(14px);
   transition: opacity .9s ease, transform .9s cubic-bezier(.16,1,.3,1);
-  text-shadow: 0 2px 24px rgba(0,0,0,.9), 0 0 40px rgba(56,225,214,.18); }
+  text-shadow: 0 2px 24px rgba(0,0,0,.95), 0 0 40px rgba(56,225,214,.18); }
 #caption .line.in { opacity: 1; transform: translateY(0); }
 #caption .line em { font-style: normal; color: var(--cyan); }
 #caption .line b { font-weight: 600; color: var(--amber); }
 
+/* location tag (small eyebrow above captions during close-ups) */
+#loctag { position: absolute; left: 50%; bottom: calc(10% + 74px); transform: translateX(-50%);
+  font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--amber);
+  z-index: 10; opacity: 0; transition: opacity .8s ease; pointer-events: none;
+  text-shadow: 0 2px 16px rgba(0,0,0,.9); }
+#loctag.in { opacity: .95; }
+
 /* finale */
 #finale { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; text-align: center; z-index: 10; pointer-events: none;
-  opacity: 0; transition: opacity 1.4s ease; }
+  justify-content: center; text-align: center; z-index: 12; pointer-events: none;
+  background: rgba(3,6,10,.45); opacity: 0; transition: opacity 1.4s ease; }
 #finale.in { opacity: 1; }
 #finale h2 { font-size: clamp(28px, 4vw, 54px); font-weight: 700; margin: 0 0 14px; color: #fff;
   letter-spacing: .02em; text-shadow: 0 0 50px rgba(56,225,214,.4); }
 #finale .tag { color: var(--muted); font-size: clamp(13px, 1.5vw, 17px); letter-spacing: .1em;
   margin-bottom: 42px; }
+#outcomes-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 30px;
+  margin-bottom: 38px; }
+#outcomes-row span { font-size: 17px; font-weight: 600; color: var(--cyan); letter-spacing: .06em;
+  display: flex; align-items: center; gap: 10px; }
+#outcomes-row span::after { content: "·"; color: var(--muted); margin-left: 20px; }
+#outcomes-row span:last-child::after { content: ""; }
 #clients { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px 34px; max-width: 900px; }
 #clients span { font-size: 15px; letter-spacing: .18em; text-transform: uppercase; color: var(--text);
   opacity: 0; transform: translateY(10px); transition: opacity .6s ease, transform .6s ease;
@@ -55,6 +72,15 @@ canvas { display: block; }
 #clients span::before { content: ""; width: 5px; height: 5px; border-radius: 50%;
   background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
 #clients span.in { opacity: .95; transform: translateY(0); }
+
+/* Changi / CBD DOM bloom */
+.bloom { position: absolute; border-radius: 50%; pointer-events: none; z-index: 8;
+  transform: translate(-50%,-50%) scale(0); transition: transform 1.4s ease; }
+.bloom.on { transform: translate(-50%,-50%) scale(1); }
+#bloom-changi { width: 420px; height: 420px;
+  background: radial-gradient(circle, rgba(255,184,77,.30) 0%, rgba(255,184,77,.10) 40%, transparent 70%); }
+#bloom-cbd { width: 520px; height: 520px;
+  background: radial-gradient(circle, rgba(0,255,240,.22) 0%, rgba(56,225,214,.08) 42%, transparent 70%); }
 
 /* controls */
 #replay { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
@@ -68,465 +94,245 @@ canvas { display: block; }
   color: var(--muted); font-family: inherit; font-size: 11px; letter-spacing: .18em;
   text-transform: uppercase; cursor: pointer; z-index: 20; opacity: .55; }
 #skip:hover { opacity: 1; color: var(--cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01s !important; animation-duration: .01s !important; }
+}
 </style>
 </head>
 <body>
+<div id="map"></div>
 <div id="vignette"></div>
+<div id="bloom-changi" class="bloom"></div>
+<div id="bloom-cbd" class="bloom"></div>
 
 <div id="title">
-  <div class="eyebrow">Singapore · New Energy Intelligence</div>
-  <h1>ISLAND GRID</h1>
-  <div class="sub"><b>HVAC · Solar · Wind · Storage</b> — sensed, understood, optimized</div>
+  <div class="eyebrow">Univers · AIP for Physical Infrastructure</div>
+  <h1>RUN AS ONE</h1>
+  <div class="sub"><b>Energy · Assets · People · Space · Environment</b> — from energy efficiency to a grid-interactive city</div>
 </div>
 
+<div id="loctag"></div>
 <div id="caption"><div class="line" id="cap-line"></div></div>
 
 <div id="finale">
-  <h2>One island. One optimized energy fabric.</h2>
-  <div class="tag">AI-DRIVEN ENERGY INTELLIGENCE FOR SINGAPORE'S MOST CRITICAL INFRASTRUCTURE</div>
+  <h2>One ontology — every signal, one language.</h2>
+  <div class="tag">ONE ASSET TO THE WHOLE CITY · SENSE → PREDICT → DECIDE → ACT</div>
+  <div id="outcomes-row">
+    <span>Energy bill down</span><span>Capex deferred</span>
+    <span>OPEX leaner</span><span>Space &amp; NOI higher</span>
+  </div>
   <div id="clients"></div>
 </div>
 
 <button id="replay">Replay</button>
 <button id="skip">Skip ▸▸</button>
 
-<script src="coast.js"></script>
-<script type="importmap">
-{ "imports": {
-  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-} }
-</script>
-<script type="module">
-import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-
-/* ================= DATA ================= */
+<script>
+/* =============================== DATA =============================== */
 const SITES = [
-  { key: "changi",  org: "Changi Airport", coords: [103.9865, 1.3644], h: 30 },
-  { key: "dbs",     org: "DBS",            coords: [103.8540, 1.2790], h: 24 },
-  { key: "ocbc",    org: "OCBC",           coords: [103.8492, 1.2846], h: 22 },
-  { key: "ngs",     org: "NGS",            coords: [103.8513, 1.2903], h: 14 },
-  { key: "frasers", org: "Frasers",        coords: [103.8465, 1.2770], h: 21 },
-  { key: "with",    org: "WITH",           coords: [103.8450, 1.2815], h: 17 },
-  { key: "psa",     org: "PSA",            coords: [103.8030, 1.2740], h: 18 },
-  { key: "mse",     org: "MSE",            coords: [103.8320, 1.3110], h: 15 },
-  { key: "hdb",     org: "HDB",            coords: [103.8490, 1.3330], h: 19 },
-  { key: "stengg",  org: "ST Engineering", coords: [103.8510, 1.3790], h: 16 },
-  { key: "htx",     org: "HTX",            coords: [103.7880, 1.3070], h: 15 },
+  { id: 0,  key: "changi",  org: "Changi Airport",  coords: [103.9865, 1.3644] },
+  { id: 1,  key: "dbs",     org: "DBS",             coords: [103.8540, 1.2790] },
+  { id: 2,  key: "ocbc",    org: "OCBC",            coords: [103.8492, 1.2846] },
+  { id: 3,  key: "ngs",     org: "NGS",             coords: [103.8513, 1.2903] },
+  { id: 4,  key: "frasers", org: "Frasers",         coords: [103.8465, 1.2770] },
+  { id: 5,  key: "with",    org: "WITH",            coords: [103.8450, 1.2815] },
+  { id: 6,  key: "psa",     org: "PSA",             coords: [103.8030, 1.2740] },
+  { id: 7,  key: "mse",     org: "MSE",             coords: [103.8320, 1.3110] },
+  { id: 8,  key: "hdb",     org: "HDB",             coords: [103.8490, 1.3330] },
+  { id: 9,  key: "stengg",  org: "ST Engineering",  coords: [103.8510, 1.3790] },
+  { id: 10, key: "htx",     org: "HTX",             coords: [103.7880, 1.3070] },
 ];
-const CX = 103.82, CZ = 1.34, SC = 400;
-const P = ([lng, lat]) => [(lng - CX) * SC, -(lat - CZ) * SC];
-const CBD = P([103.851, 1.283]);
-const CHANGI = P(SITES[0].coords);
+const CHANGI = SITES[0].coords;
+const CHANGI_TERMINALS = [103.9885, 1.3590]; // T1/T3 building cluster, for close-up lighting
+const CBD = [103.8500, 1.2825];
 
-/* ================= HELPERS ================= */
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const lerp = (a, b, p) => a + (b - a) * p;
-const smooth = (p) => p * p * (3 - 2 * p);
-const easeOut = (p) => 1 - Math.pow(1 - p, 3);
-function prng(seed) { // mulberry32
-  return () => {
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const ring = COAST[0].map(P);
-function inIsland(x, z) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, zi] = ring[i], [xj, zj] = ring[j];
-    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-/* ================= SCENE ================= */
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-document.body.prepend(renderer.domElement);
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x020409, 0.0016);
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 3000);
-
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.5, 0.5);
-composer.addPass(bloom);
-composer.addPass(new OutputPass());
-
-addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
-});
-
-/* --- starfield --- */
-{
-  const r = prng(7);
-  const pos = new Float32Array(1400 * 3);
-  for (let i = 0; i < 1400; i++) {
-    const th = r() * Math.PI * 2, ph = Math.acos(2 * r() - 1);
-    const R = 900 + r() * 600;
-    pos[i*3] = R * Math.sin(ph) * Math.cos(th);
-    pos[i*3+1] = Math.abs(R * Math.cos(ph)) * 0.6 + 40;
-    pos[i*3+2] = R * Math.sin(ph) * Math.sin(th);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
-    color: 0x3a5570, size: 1.4, sizeAttenuation: true, transparent: true, opacity: 0.8 })));
-}
-
-/* --- sea grid floor --- */
-const grid = new THREE.GridHelper(1600, 90, 0x0d2233, 0x081420);
-grid.position.y = -0.4;
-grid.material.transparent = true;
-grid.material.opacity = 0;
-scene.add(grid);
-
-/* --- radial glow under island --- */
-{
-  const cv = document.createElement("canvas"); cv.width = cv.height = 256;
-  const c = cv.getContext("2d");
-  const g = c.createRadialGradient(128, 128, 10, 128, 128, 128);
-  g.addColorStop(0, "rgba(24,80,90,.5)"); g.addColorStop(1, "rgba(24,80,90,0)");
-  c.fillStyle = g; c.fillRect(0, 0, 256, 256);
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(420, 300),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true,
-      depthWrite: false, opacity: 0.9 }));
-  glow.rotation.x = -Math.PI / 2; glow.position.set(-8, -0.3, -4);
-  scene.add(glow);
-}
-
-/* --- neon coastline (draw-on) --- */
-const coastPts = ring.map(([x, z]) => new THREE.Vector3(x, 0.3, z));
-coastPts.push(coastPts[0].clone());
-const coastGeo = new THREE.BufferGeometry().setFromPoints(coastPts);
-const coastLine = new THREE.Line(coastGeo,
-  new THREE.LineBasicMaterial({ color: 0x2ee8dc, transparent: true, opacity: 0.95 }));
-coastGeo.setDrawRange(0, 0);
-scene.add(coastLine);
-// soft double stroke for glow body
-const coastLine2 = new THREE.Line(coastGeo.clone(),
-  new THREE.LineBasicMaterial({ color: 0x1a6f76, transparent: true, opacity: 0.5 }));
-coastLine2.position.y = -0.12; coastLine2.geometry.setDrawRange(0, 0);
-scene.add(coastLine2);
-
-/* --- city blocks (instanced) --- */
-const CITY_N = 720;
-const cityDelays = new Float32Array(CITY_N);
-const cityHeights = new Float32Array(CITY_N);
-const cityPos = [];
-{
-  const r = prng(42);
-  let placed = 0, guard = 0;
-  while (placed < CITY_N && guard++ < 40000) {
-    const x = lerp(-92, 90, r()), z = lerp(-52, 46, r());
-    if (!inIsland(x, z)) continue;
-    const dCbd = Math.hypot(x - CBD[0], z - CBD[1]);
-    const hub = Math.exp(-dCbd / 26);
-    const h = 1.2 + r() * 3.5 + hub * (5 + r() * 17);
-    cityPos.push([x, z]); cityHeights[placed] = h;
-    cityDelays[placed] = r() * 0.75 + hub * 0.15;
-    placed++;
-  }
-}
-const cityMesh = new THREE.InstancedMesh(
-  new THREE.BoxGeometry(1.6, 1, 1.6),
-  new THREE.MeshBasicMaterial({ color: 0x123043, transparent: true, opacity: 0.92 }),
-  cityPos.length);
-const dummy = new THREE.Object3D();
-function setCityGrowth(p) { // p 0..1 global rise progress
-  for (let i = 0; i < cityPos.length; i++) {
-    const lp = clamp((p - cityDelays[i]) / 0.25, 0, 1);
-    const h = Math.max(0.001, cityHeights[i] * easeOut(lp));
-    dummy.position.set(cityPos[i][0], h / 2, cityPos[i][1]);
-    dummy.scale.set(1, h, 1);
-    dummy.updateMatrix();
-    cityMesh.setMatrixAt(i, dummy.matrix);
-  }
-  cityMesh.instanceMatrix.needsUpdate = true;
-}
-setCityGrowth(0);
-scene.add(cityMesh);
-
-/* --- asset towers + labels + rings + beams --- */
-function labelSprite(text, color) {
-  const cv = document.createElement("canvas");
-  const c = cv.getContext("2d");
-  c.font = "600 44px 'Space Grotesk', 'Avenir Next', sans-serif";
-  const w = Math.ceil(c.measureText(text).width) + 46;
-  cv.width = w; cv.height = 78;
-  const c2 = cv.getContext("2d");
-  c2.font = "600 44px 'Space Grotesk', 'Avenir Next', sans-serif";
-  c2.textAlign = "center"; c2.textBaseline = "middle";
-  c2.shadowColor = color; c2.shadowBlur = 8;
-  c2.fillStyle = "#c9e2e2";
-  c2.fillText(text, w / 2, 40);
-  const tex = new THREE.CanvasTexture(cv);
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true,
-    opacity: 0, depthWrite: false }));
-  sp.scale.set(w / 9, 78 / 9, 1);
-  return sp;
-}
-const assets = SITES.map((s, i) => {
-  const [x, z] = P(s.coords);
-  const isChangi = i === 0;
-  const color = isChangi ? 0xffb84d : 0x2cc9bd;
-  const g = new THREE.Group();
-  g.position.set(x, 0, z);
-
-  const tower = new THREE.Mesh(
-    new THREE.BoxGeometry(2.6, 1, 2.6),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
-  tower.scale.y = 0.001; tower.position.y = 0;
-  g.add(tower);
-
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 0.75, 60, 8, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0,
-      side: THREE.DoubleSide, depthWrite: false }));
-  beam.position.y = 30;
-  g.add(beam);
-
-  const ringMesh = new THREE.Mesh(
-    new THREE.RingGeometry(1, 1.18, 48),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0,
-      side: THREE.DoubleSide, depthWrite: false }));
-  ringMesh.rotation.x = -Math.PI / 2; ringMesh.position.y = 0.35;
-  g.add(ringMesh);
-
-  const label = labelSprite(s.org, isChangi ? "#ffb84d" : "#35f0e0");
-  // fan labels of tightly-clustered CBD sites outward so they stay legible
-  const dx = x - CBD[0], dz = z - CBD[1], dc = Math.hypot(dx, dz);
-  if (dc < 8) {
-    const ux = dc > 0.01 ? dx / dc : Math.cos(i * 2.2);
-    const uz = dc > 0.01 ? dz / dc : Math.sin(i * 2.2);
-    label.position.set(ux * 14, s.h + 6 + (i % 3) * 6, uz * 14);
-  } else {
-    label.position.y = s.h + 7;
-  }
-  g.add(label);
-
-  scene.add(g);
-  return { ...s, x, z, color, group: g, tower, beam, ring: ringMesh, label,
-    lit: 0, litAt: -1 };
-});
-function igniteAsset(a, now) { if (a.litAt < 0) a.litAt = now; }
-let labelFade = 1, labelFadeTarget = 1; // dim asset labels while the network is the hero
-function updateAssets(now) {
-  labelFade += (labelFadeTarget - labelFade) * 0.04;
-  for (const a of assets) {
-    if (a.litAt < 0) continue;
-    const t = (now - a.litAt) / 1000;
-    const rise = easeOut(clamp(t / 1.1, 0, 1));
-    a.lit = rise;
-    const h = Math.max(0.001, a.h * rise);
-    a.tower.scale.y = h; a.tower.position.y = h / 2;
-    const pulse = 0.75 + 0.25 * Math.sin(now / 300 + a.x);
-    a.tower.material.opacity = 0.4 + 0.3 * pulse * rise;
-    a.beam.material.opacity = 0.055 * rise * pulse;
-    a.label.material.opacity = clamp((t - 0.7) / 0.8, 0, 1) * 0.95 *
-      (a.key === "changi" ? 1 : labelFade);
-    const rp = (t % 2.2) / 2.2;
-    const rs = 2 + rp * 16;
-    a.ring.scale.set(rs, rs, 1);
-    a.ring.material.opacity = rise * 0.5 * (1 - rp);
-  }
-}
-
-/* --- energy arcs + flowing particles --- */
-const ARC_SEG = 72;
-const arcs = assets.slice(1).map((a, i) => {
-  const from = new THREE.Vector3(CHANGI[0], 2, CHANGI[1]);
-  const to = new THREE.Vector3(a.x, 2, a.z);
-  const mid = from.clone().lerp(to, 0.5);
-  const d = from.distanceTo(to);
-  mid.y = 10 + d * 0.28;
-  const perp = new THREE.Vector3(-(to.z - from.z), 0, to.x - from.x).normalize()
-    .multiplyScalar(d * 0.1 * (i % 2 ? 1 : -1));
-  mid.add(perp);
-  const curve = new THREE.QuadraticBezierCurve3(from, mid, to);
-  const pts = curve.getPoints(ARC_SEG);
-  const geo = new THREE.BufferGeometry().setFromPoints(pts);
-  geo.setDrawRange(0, 0);
-  const line = new THREE.Line(geo,
-    new THREE.LineBasicMaterial({ color: 0x8c9aff, transparent: true, opacity: 0.85 }));
-  scene.add(line);
-
-  const N_P = 22;
-  const ppos = new Float32Array(N_P * 3);
-  const pgeo = new THREE.BufferGeometry();
-  pgeo.setAttribute("position", new THREE.BufferAttribute(ppos, 3));
-  const points = new THREE.Points(pgeo, new THREE.PointsMaterial({
-    color: 0x9ffff8, size: 2.3, transparent: true, opacity: 0, depthWrite: false }));
-  scene.add(points);
-  return { curve, line, geo, points, ppos, pgeo, reveal: 0, offset: Math.random() };
-});
-function updateArcs(now, revealP) {
-  arcs.forEach((arc, i) => {
-    const p = clamp((revealP - i * 0.055) / 0.35, 0, 1);
-    arc.reveal = easeOut(p);
-    arc.geo.setDrawRange(0, Math.floor(arc.reveal * ARC_SEG) + 1);
-    const on = arc.reveal >= 1;
-    arc.points.material.opacity = on ? 0.95 : 0;
-    if (on) {
-      const N = arc.ppos.length / 3;
-      for (let k = 0; k < N; k++) {
-        const t = ((now / 4200) + arc.offset + k / N) % 1;
-        const v = arc.curve.getPoint(t);
-        arc.ppos[k*3] = v.x; arc.ppos[k*3+1] = v.y; arc.ppos[k*3+2] = v.z;
-      }
-      arc.pgeo.attributes.position.needsUpdate = true;
-    }
-  });
-}
-
-/* --- Changi halo: orbiting particles --- */
-const halo = (() => {
-  const N = 90, r = prng(5);
-  const pos = new Float32Array(N * 3), seeds = [];
-  for (let i = 0; i < N; i++) seeds.push({ a: r() * Math.PI * 2, R: 6 + r() * 9,
-    y: 2 + r() * 26, sp: 0.3 + r() * 0.7 });
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffd9a0, size: 1.3,
-    transparent: true, opacity: 0, depthWrite: false }));
-  pts.position.set(CHANGI[0], 0, CHANGI[1]);
-  scene.add(pts);
-  return { pts, g, pos, seeds };
-})();
-function updateHalo(now, vis) {
-  halo.pts.material.opacity = vis * 0.9;
-  if (vis <= 0) return;
-  halo.seeds.forEach((s, i) => {
-    const a = s.a + now / 1000 * s.sp;
-    halo.pos[i*3] = Math.cos(a) * s.R;
-    halo.pos[i*3+1] = s.y + Math.sin(now / 700 + i) * 0.8;
-    halo.pos[i*3+2] = Math.sin(a) * s.R;
-  });
-  halo.g.attributes.position.needsUpdate = true;
-}
-
-/* ================= CINEMATIC TIMELINE ================= */
 /* All narrative is text — no numeric stats anywhere. */
 const CAPS = {
   city:    'Every building on this island consumes energy — <em>most of it for cooling</em>.',
   changi1: 'At <b>Changi Airport</b>, our AI retunes the cooling plant <em>in real time</em> —',
   changi2: '— sensing every arriving flight, every surge of passengers, every shift in the weather.',
   assets:  'Banks. Ports. Ministries. Galleries. Housing. <em>One by one, assets come online.</em>',
-  fabric:  'Together they form a <em>living energy fabric</em> — optimized continuously, island-wide.',
+  fabric:  'Together they run as one — <em>sense, predict, decide, act</em> — across the whole city.',
 };
 
-const camFrom = new THREE.Vector3(), camTo = new THREE.Vector3();
-const lookFrom = new THREE.Vector3(), lookTo = new THREE.Vector3();
-const look = new THREE.Vector3();
-function camSeg(fp, tp, fl, tl, p) {
-  camFrom.set(...fp); camTo.set(...tp); lookFrom.set(...fl); lookTo.set(...tl);
-  camera.position.lerpVectors(camFrom, camTo, smooth(p));
-  look.lerpVectors(lookFrom, lookTo, smooth(p));
-  camera.lookAt(look);
+/* =============================== HELPERS =============================== */
+const $ = (s) => document.querySelector(s);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const easeInOutCubic = (p) => p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2;
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const dur = (ms) => reduced ? 0 : ms;
+
+/* =============================== MAP =============================== */
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://tiles.openfreemap.org/styles/dark",
+  center: [103.8400, 1.3250],
+  zoom: 10.6,
+  pitch: 45,
+  bearing: -15,
+  antialias: true,
+  interactive: false,
+  attributionControl: { compact: true },
+});
+
+function arcCoords(h, a, steps = 56) {
+  const dx = a[0] - h[0], dy = a[1] - h[1];
+  const d = Math.hypot(dx, dy) || 1e-9;
+  const nx = -dy / d, ny = dx / d, k = 0.18 * d;
+  const c = [(h[0] + a[0]) / 2 + nx * k, (h[1] + a[1]) / 2 + ny * k];
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, u = 1 - t;
+    pts.push([u*u*h[0] + 2*u*t*c[0] + t*t*a[0], u*u*h[1] + 2*u*t*c[1] + t*t*a[1]]);
+  }
+  return pts;
+}
+const ARCS = SITES.slice(1).map((s) => arcCoords(CHANGI, s.coords));
+
+/* --- real 3D buildings; lit state via feature-state ("amber" | "cyan") --- */
+let litFeatures = [], litSeen = new Set();
+function setupLayers() {
+  const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
+  map.addLayer({
+    id: "bld-3d", type: "fill-extrusion", source: "openmaptiles", "source-layer": "building",
+    minzoom: 12.5,
+    paint: {
+      "fill-extrusion-color": "#0e1b28",
+      "fill-extrusion-height": ["min", 320, ["coalesce", ["get", "render_height"], ["get", "height"], 8]],
+      "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+      "fill-extrusion-opacity": 0.92,
+    },
+  }, firstSymbol);
+
+  // lit buildings live in their own source: exact copied footprints, drawn over the base
+  map.addSource("lit-bld", { type: "geojson",
+    data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({
+    id: "lit-bld-3d", type: "fill-extrusion", source: "lit-bld",
+    paint: {
+      "fill-extrusion-color": ["match", ["get", "tone"],
+        "amber", "#e8a13c", "#36f2e2"],
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": ["get", "b"],
+      "fill-extrusion-opacity": 0.98,
+    },
+  }, firstSymbol);
+
+  map.addSource("sites", { type: "geojson", data: {
+    type: "FeatureCollection",
+    features: SITES.map((s) => ({ type: "Feature", id: s.id,
+      properties: { label: s.org }, geometry: { type: "Point", coordinates: s.coords } })),
+  }});
+  const onState = ["boolean", ["feature-state", "on"], false];
+  map.addLayer({ id: "site-pulse", type: "circle", source: "sites",
+    paint: { "circle-radius": 0, "circle-color": "#38e1d6", "circle-opacity": 0,
+      "circle-blur": 0.6, "circle-pitch-alignment": "map" } });
+  map.addLayer({ id: "site-core", type: "circle", source: "sites",
+    paint: {
+      "circle-radius": ["case", onState, 5, 0],
+      "circle-color": "#38e1d6",
+      "circle-stroke-color": "#eaffff", "circle-stroke-width": ["case", onState, 1, 0],
+      "circle-opacity": ["case", onState, 1, 0],
+    } });
+  map.addLayer({ id: "site-label", type: "symbol", source: "sites",
+    layout: { "text-field": ["get", "label"], "text-size": 12,
+      "text-variable-anchor": ["top", "bottom", "left", "right"],
+      "text-radial-offset": 1.0, "text-justify": "auto",
+      "text-font": ["Noto Sans Regular"] },
+    paint: { "text-color": "#eaf6f8", "text-halo-color": "#05080d", "text-halo-width": 1.5,
+      "text-opacity": ["case", onState, 0.95, 0] } });
+
+  map.addSource("arcs", { type: "geojson", lineMetrics: true,
+    data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({ id: "arc-glow", type: "line", source: "arcs",
+    layout: { "line-cap": "round" },
+    paint: { "line-color": "#8c9aff", "line-width": 6, "line-blur": 6, "line-opacity": 0.4 } }, "site-pulse");
+  map.addLayer({ id: "arc-core", type: "line", source: "arcs",
+    layout: { "line-cap": "round" },
+    paint: { "line-width": 2.2,
+      "line-gradient": ["interpolate", ["linear"], ["line-progress"],
+        0, "#ffb84d", 0.35, "#8c9aff", 1, "#38e1d6"] } }, "site-pulse");
+  map.addLayer({ id: "arc-flow", type: "line", source: "arcs",
+    paint: { "line-color": "#dffdfb", "line-width": 2.4, "line-opacity": 0,
+      "line-dasharray": [0, 4, 3] } }, "site-pulse");
 }
 
-const CHG = [CHANGI[0], 8, CHANGI[1]];
-const PHASES = [
-  { name: "outline", dur: 7000,
-    enter() { $title.classList.add("in"); },
-    update(ms, now, p) {
-      camSeg([0, 260, 300], [0, 190, 250], [0, 0, 0], [0, 0, 0], p);
-      const n = Math.floor(easeOut(clamp(ms / 5200, 0, 1)) * coastPts.length);
-      coastGeo.setDrawRange(0, n);
-      coastLine2.geometry.setDrawRange(0, n);
-      grid.material.opacity = 0.5 * clamp(ms / 2600, 0, 1);
-      if (ms > 5800) $title.classList.add("out");
-    },
-    exit() { $title.classList.remove("in", "out");
-      coastGeo.setDrawRange(0, Infinity); coastLine2.geometry.setDrawRange(0, Infinity); } },
+function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150) {
+  try {
+    const p = map.project(lngLat);
+    const feats = map.queryRenderedFeatures(
+      [[p.x - radiusPx, p.y - radiusPx], [p.x + radiusPx, p.y + radiusPx]], { layers: ["bld-3d"] });
+    const degLat = maxMeters / 110574;
+    const degLng = maxMeters / 111320;
+    const near = (ring) => ring.some(([x, y]) =>
+      Math.abs(x - lngLat[0]) < degLng && Math.abs(y - lngLat[1]) < degLat);
+    feats.forEach((f) => {
+      // tiles merge many footprints into one (Multi)Polygon — keep only
+      // the polygons actually near the site, drop the far-flung fragments
+      const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates]
+        : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates : [];
+      const kept = polys.filter((poly) => near(poly[0]));
+      if (!kept.length) return;
+      const key = JSON.stringify(kept[0][0][0]) + tone;
+      if (litSeen.has(key)) return;
+      litSeen.add(key);
+      const pr = f.properties || {};
+      litFeatures.push({ type: "Feature", properties: {
+          tone,
+          h: Math.min(320, pr.render_height ?? pr.height ?? 8),
+          b: pr.render_min_height ?? 0,
+        }, geometry: { type: "MultiPolygon", coordinates: kept } });
+    });
+    map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: litFeatures });
+  } catch (e) { /* DOM bloom still carries the moment */ }
+}
+function unlightBuildings() {
+  litFeatures = []; litSeen = new Set();
+  map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: [] });
+}
 
-  { name: "city", dur: 8000,
-    enter() { caption(CAPS.city); },
-    update(ms, now, p) {
-      camSeg([0, 190, 250], [-30, 120, 185], [0, 0, 0], [0, 0, 0], p);
-      setCityGrowth(easeOut(clamp(ms / 6000, 0, 1)));
-      if (ms > 6800) captionOut();
-    },
-    exit() { setCityGrowth(1); captionOut(); } },
-
-  { name: "changi", dur: 13000,
-    enter() { igniteAsset(assets[0], performance.now()); },
-    update(ms, now, p) {
-      camSeg([-30, 120, 185], [CHANGI[0] + 34, 26, CHANGI[1] + 40], [0, 0, 0], CHG, clamp(p * 1.6, 0, 1));
-      if (ms > 2600 && !this._c1) { this._c1 = true; caption(CAPS.changi1); }
-      if (ms > 7200 && !this._c2) { this._c2 = true; caption(CAPS.changi2); }
-      if (ms > 11800) captionOut();
-      updateHalo(now, clamp((ms - 1500) / 1500, 0, 1));
-    },
-    exit() { this._c1 = this._c2 = false; captionOut(); } },
-
-  { name: "assets", dur: 12000,
-    enter() { caption(CAPS.assets); },
-    update(ms, now, p) {
-      camSeg([CHANGI[0] + 34, 26, CHANGI[1] + 40], [40, 150, 205], CHG, [0, 0, 0], clamp(p * 1.35, 0, 1));
-      assets.forEach((a, i) => {
-        if (i > 0 && ms > 2200 + (i - 1) * 850) igniteAsset(a, now);
-      });
-      if (ms > 10800) captionOut();
-      updateHalo(now, 1);
-    },
-    exit() { assets.forEach((a) => igniteAsset(a, performance.now() - 3000)); captionOut(); } },
-
-  { name: "fabric", dur: 11000,
-    enter() { caption(CAPS.fabric); labelFadeTarget = 0.18; },
-    update(ms, now, p) {
-      camSeg([40, 150, 205], [-60, 120, 195], [0, 0, 0], [0, 0, 0], p);
-      updateArcs(now, clamp(ms / 7000, 0, 1));
-      if (ms > 9800) captionOut();
-      updateHalo(now, 1);
-    },
-    exit() { updateArcs(performance.now(), 1); captionOut(); } },
-
-  { name: "finale", dur: Infinity,
-    enter() {
-      labelFadeTarget = 0.18;
-      $finale.classList.add("in");
-      this._timers = [];
-      document.querySelectorAll("#clients span").forEach((el, i) =>
-        this._timers.push(setTimeout(() => el.classList.add("in"), 800 + i * 130)));
-      this._timers.push(setTimeout(() => $replay.classList.add("in"), 2800));
-    },
-    update(ms, now) {
-      const a = now / 14000;
-      const R = 235, el = 135;
-      camera.position.set(Math.sin(a) * R, el, Math.cos(a) * R);
-      camera.lookAt(0, 4, 0);
-      updateArcs(now, 1);
-      updateHalo(now, 1);
-    },
-    exit() {
-      (this._timers || []).forEach(clearTimeout);
-      $finale.classList.remove("in");
-      $replay.classList.remove("in");
-      document.querySelectorAll("#clients span").forEach((el) => el.classList.remove("in"));
-    } },
+/* --- arcs progressive reveal + flowing dash --- */
+let arcProgress = ARCS.map(() => 0);
+function setArcData() {
+  const features = [];
+  ARCS.forEach((coords, i) => {
+    const p = arcProgress[i];
+    if (p <= 0) return;
+    const n = Math.max(2, Math.round(p * coords.length));
+    features.push({ type: "Feature", properties: {},
+      geometry: { type: "LineString", coordinates: coords.slice(0, n) } });
+  });
+  map.getSource("arcs")?.setData({ type: "FeatureCollection", features });
+}
+const dashSeq = [
+  [0,4,3],[0.5,4,2.5],[1,4,2],[1.5,4,1.5],[2,4,1],[2.5,4,0.5],[3,4,0],
+  [0,0.5,3,3.5],[0,1,3,3],[0,1.5,3,2.5],[0,2,3,2],[0,2.5,3,1.5],[0,3,3,1],[0,3.5,3,0.5],
 ];
-PHASES.reduce((acc, ph) => { ph.start = acc; return acc + ph.dur; }, 0);
+let dashStep = 0, lastDash = 0;
+function tickDashFlow(now) {
+  if (now - lastDash > 70) {
+    lastDash = now;
+    dashStep = (dashStep + 1) % dashSeq.length;
+    map.setPaintProperty("arc-flow", "line-dasharray", dashSeq[dashStep]);
+  }
+}
 
-/* ================= UI ================= */
-const $title = document.getElementById("title");
-const $finale = document.getElementById("finale");
-const $replay = document.getElementById("replay");
-const $cap = document.getElementById("cap-line");
-document.getElementById("clients").innerHTML =
-  SITES.map((s) => `<span>${s.org}</span>`).join("");
+let sitesOn = 0;
+const setSiteOn = (i, on) => map.setFeatureState({ source: "sites", id: i }, { on });
+const allSitesOn = () => { SITES.forEach((s) => setSiteOn(s.id, true)); sitesOn = SITES.length; };
+const allSitesOff = () => { SITES.forEach((s) => setSiteOn(s.id, false)); sitesOn = 0; };
+
+function pinBloom(el, lngLat) {
+  const p = map.project(lngLat);
+  el.style.left = p.x + "px"; el.style.top = p.y + "px";
+}
+
+/* =============================== UI =============================== */
+const $title = $("#title"), $finale = $("#finale"), $replay = $("#replay");
+const $cap = $("#cap-line"), $loc = $("#loctag");
+$("#clients").innerHTML = SITES.map((s) => `<span>${s.org}</span>`).join("");
 
 let capToken = 0;
 function caption(html) {
@@ -539,58 +345,215 @@ function caption(html) {
   }, 350);
 }
 function captionOut() { capToken++; $cap.classList.remove("in"); }
+function loctag(text) {
+  if (!text) { $loc.classList.remove("in"); return; }
+  $loc.textContent = text; $loc.classList.add("in");
+}
 
-/* ================= ENGINE ================= */
+/* =============================== PHASES =============================== */
+const PHASES = [
+  { name: "intro", dur: 9000,
+    enter() {
+      map.stop();
+      map.jumpTo({ center: [103.8400, 1.3250], zoom: 10.6, pitch: 45, bearing: -15 });
+      map.easeTo({ zoom: 11.05, pitch: 52, bearing: -4, duration: dur(8200), easing: easeInOutCubic });
+      $title.classList.add("in");
+      caption("");
+    },
+    update(ms) {
+      if (ms > 4200 && !this._c) { this._c = true; caption(CAPS.city); }
+      if (ms > 7600) $title.classList.add("out");
+    },
+    exit() { this._c = false; $title.classList.remove("in", "out"); captionOut(); } },
+
+  { name: "changi", dur: 17000,
+    enter() {
+      map.stop();
+      map.flyTo({ center: CHANGI_TERMINALS, zoom: 15.6, pitch: 62, bearing: 15,
+        duration: dur(5000), curve: 1.45, easing: easeInOutCubic });
+      this._lit = false; this._orbit = false; this._c1 = this._c2 = false;
+    },
+    update(ms, now) {
+      if (ms > 5300 && !this._lit) { // after the fly-to has landed
+        this._lit = true;
+        lightBuildingsAt(CHANGI_TERMINALS, "amber", 260, 700);
+        $("#bloom-changi").classList.add("on");
+        setSiteOn(0, true); sitesOn = 1;
+        loctag("Changi Airport · Terminal Three");
+      }
+      if (ms > 5600 && !this._orbit) {
+        this._orbit = true;
+        map.easeTo({ bearing: 95, pitch: 58, duration: dur(11000), easing: (t) => t });
+      }
+      if (ms > 5000 && !this._c1) { this._c1 = true; caption(CAPS.changi1); }
+      if (ms > 10600 && !this._c2) { this._c2 = true; caption(CAPS.changi2); }
+      if (ms > 15600) { captionOut(); loctag(""); }
+      pinBloom($("#bloom-changi"), CHANGI_TERMINALS);
+    },
+    exit() { captionOut(); loctag(""); } },
+
+  { name: "cbd", dur: 15000,
+    enter() {
+      map.stop();
+      $("#bloom-changi").classList.remove("on");
+      map.flyTo({ center: CBD, zoom: 15.0, pitch: 60, bearing: -35,
+        duration: dur(4800), curve: 1.4, easing: easeInOutCubic });
+      caption("");
+      this._lit = false; this._orbit = false; this._c = false;
+    },
+    update(ms, now) {
+      if (ms > 5100 && !this._lit) { // after the fly-to has landed
+        this._lit = true;
+        // real towers of the CBD clients light up cyan
+        for (const k of ["dbs", "ocbc", "ngs", "frasers", "with"]) {
+          const s = SITES.find((x) => x.key === k);
+          lightBuildingsAt(s.coords, "cyan", 55, 90);
+          setSiteOn(s.id, true);
+        }
+        sitesOn = 6;
+        $("#bloom-cbd").classList.add("on");
+        loctag("Raffles Place · Marina Bay");
+      }
+      if (ms > 5300 && !this._c) { this._c = true; caption(CAPS.assets); }
+      if (ms > 5600 && !this._orbit) {
+        this._orbit = true;
+        map.easeTo({ bearing: 25, duration: dur(8800), easing: (t) => t });
+      }
+      if (ms > 13600) { captionOut(); loctag(""); }
+      pinBloom($("#bloom-cbd"), CBD);
+    },
+    exit() { captionOut(); loctag(""); $("#bloom-cbd").classList.remove("on"); } },
+
+  { name: "island", dur: 15000,
+    enter() {
+      map.stop();
+      unlightBuildings();
+      map.flyTo({ center: [103.8520, 1.3180], zoom: 11.35, pitch: 50, bearing: -8,
+        duration: dur(4200), curve: 1.35, easing: easeInOutCubic });
+      caption("");
+      this._c = false; this._orbit = false;
+      arcProgress = ARCS.map(() => 0);
+      map.setPaintProperty("arc-flow", "line-opacity", 0);
+      this._flow = false;
+    },
+    update(ms, now) {
+      // remaining assets ignite one by one on the real map
+      SITES.forEach((s, i) => {
+        if (i > 0 && ms > 2600 + i * 620 && s.id >= sitesOn) {
+          setSiteOn(s.id, true); sitesOn = s.id + 1;
+        }
+      });
+      if (ms > 4400 && !this._c) { this._c = true; caption(CAPS.fabric); }
+      if (ms > 5400 && !this._orbit) {
+        this._orbit = true;
+        map.easeTo({ bearing: 10, duration: dur(9200), easing: (t) => t });
+      }
+      // arcs shoot from Changi to every asset
+      let changed = false;
+      ARCS.forEach((_, i) => {
+        const p = clamp((ms - 5800 - i * 240) / 800, 0, 1);
+        const e = easeOut(p);
+        if (e !== arcProgress[i]) { arcProgress[i] = e; changed = true; }
+      });
+      if (changed) setArcData();
+      if (!this._flow && arcProgress.every((p) => p >= 1)) {
+        this._flow = true;
+        map.setPaintProperty("arc-flow", "line-opacity", 0.9);
+      }
+      if (this._flow) tickDashFlow(now);
+      if (ms > 13800) captionOut();
+    },
+    exit() {
+      allSitesOn();
+      arcProgress = ARCS.map(() => 1); setArcData();
+      map.setPaintProperty("arc-flow", "line-opacity", 0.9);
+      captionOut();
+    } },
+
+  { name: "finale", dur: Infinity,
+    enter() {
+      map.stop();
+      map.easeTo({ center: [103.8520, 1.3180], zoom: 11.2, pitch: 52, bearing: 40,
+        duration: dur(26000), easing: (t) => t });
+      $finale.classList.add("in");
+      this._timers = [];
+      document.querySelectorAll("#clients span").forEach((el, i) =>
+        this._timers.push(setTimeout(() => el.classList.add("in"), 900 + i * 130)));
+      this._timers.push(setTimeout(() => $replay.classList.add("in"), 3000));
+      this._swung = false;
+    },
+    update(ms, now) {
+      tickDashFlow(now);
+      if (ms > 26500 && !this._swung) { // keep the world slowly turning forever
+        this._swung = true;
+        map.easeTo({ bearing: -20, duration: dur(30000), easing: (t) => t });
+      }
+      if (ms > 57000) this._swung = false;
+    },
+    exit() {
+      (this._timers || []).forEach(clearTimeout);
+      $finale.classList.remove("in");
+      $replay.classList.remove("in");
+      document.querySelectorAll("#clients span").forEach((el) => el.classList.remove("in"));
+    } },
+];
+PHASES.reduce((acc, ph) => { ph.start = acc; return acc + ph.dur; }, 0);
+
+/* =============================== ENGINE =============================== */
 let playT = 0, cur = -1, last = performance.now();
+
 function resetWorld() {
-  labelFade = labelFadeTarget = 1;
-  coastGeo.setDrawRange(0, 0); coastLine2.geometry.setDrawRange(0, 0);
-  grid.material.opacity = 0;
-  setCityGrowth(0);
-  assets.forEach((a) => {
-    a.litAt = -1; a.lit = 0;
-    a.tower.scale.y = 0.001; a.tower.position.y = 0;
-    a.beam.material.opacity = 0; a.label.material.opacity = 0; a.ring.material.opacity = 0;
-  });
-  arcs.forEach((arc) => { arc.geo.setDrawRange(0, 0); arc.points.material.opacity = 0; });
-  updateHalo(performance.now(), 0);
-  captionOut();
+  map.stop();
+  unlightBuildings();
+  allSitesOff();
+  arcProgress = ARCS.map(() => 0); setArcData();
+  if (map.getLayer("arc-flow")) map.setPaintProperty("arc-flow", "line-opacity", 0);
+  ["#bloom-changi", "#bloom-cbd"].forEach((s) => $(s).classList.remove("on"));
+  captionOut(); loctag("");
 }
 function jumpTo(idx) {
   idx = clamp(idx, 0, PHASES.length - 1);
   if (cur >= 0) PHASES[cur].exit();
-  // rebuild world state expected at the start of this phase
   resetWorld();
-  if (idx >= 1) { coastGeo.setDrawRange(0, Infinity);
-    coastLine2.geometry.setDrawRange(0, Infinity); grid.material.opacity = 0.5; }
-  if (idx >= 2) setCityGrowth(1);
-  if (idx >= 3) igniteAsset(assets[0], performance.now() - 3000);
-  if (idx >= 4) assets.forEach((a) => igniteAsset(a, performance.now() - 3000));
-  if (idx >= 5) updateArcs(performance.now(), 1);
-  cur = idx;
+  // world state each phase expects on entry (for skips/replay)
+  if (idx >= 2) { setSiteOn(0, true); sitesOn = 1; }
+  if (idx >= 3) { ["dbs","ocbc","ngs","frasers","with"].forEach((k) => {
+      setSiteOn(SITES.find((s) => s.key === k).id, true); }); sitesOn = 6; }
+  if (idx >= 4) { allSitesOn(); arcProgress = ARCS.map(() => 1); setArcData();
+    map.setPaintProperty("arc-flow", "line-opacity", 0.9); }
   playT = PHASES[idx].start;
+  cur = idx;
   PHASES[idx].enter();
 }
 $replay.onclick = () => jumpTo(0);
-document.getElementById("skip").onclick = () => jumpTo(cur + 1);
+$("#skip").onclick = () => jumpTo(cur + 1);
 
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = clamp(now - last, 0, 100); // first RAF timestamp can precede `last` — never negative
+  const dt = clamp(now - last, 0, 100); // first RAF timestamp can precede `last`
   last = now;
   playT = Math.max(0, playT + dt);
   let idx = 0;
   for (let i = PHASES.length - 1; i >= 0; i--) if (playT >= PHASES[i].start) { idx = i; break; }
   if (idx !== cur) { if (cur >= 0) PHASES[cur].exit(); cur = idx; PHASES[cur].enter(); }
   const ph = PHASES[cur];
-  const p = ph.dur === Infinity ? 0 : clamp((playT - ph.start) / ph.dur, 0, 1);
-  ph.update(playT - ph.start, now, p);
-  updateAssets(now);
+  ph.update(playT - ph.start, now);
+
+  // pulsing rings on lit sites
+  if (map.getLayer("site-pulse") && sitesOn > 0) {
+    const phse = (now % 1400) / 1400;
+    const on = ["boolean", ["feature-state", "on"], false];
+    map.setPaintProperty("site-pulse", "circle-radius", ["case", on, 6 + phse * 16, 0]);
+    map.setPaintProperty("site-pulse", "circle-opacity", ["case", on, 0.55 * (1 - phse), 0]);
+  }
   window.__dbg = { playT: Math.round(playT), cur, phase: ph.name, dt: Math.round(dt) };
-  composer.render();
 }
-jumpTo(0);
-requestAnimationFrame(frame);
+
+map.on("load", () => {
+  setupLayers();
+  jumpTo(0);
+  requestAnimationFrame(frame);
+});
 </script>
 </body>
 </html>
