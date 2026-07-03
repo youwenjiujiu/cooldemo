@@ -4,8 +4,18 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Island Grid — Singapore Energy Intelligence</title>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="config.js"></script>
+<script>
+  // pick the GL library by token: Mapbox when MAPBOX_TOKEN is set, MapLibre otherwise
+  const USE_MAPBOX = typeof MAPBOX_TOKEN !== "undefined" && !!MAPBOX_TOKEN;
+  const GL_LIB = USE_MAPBOX
+    ? { js: "https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js",
+        css: "https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" }
+    : { js: "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+        css: "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" };
+  document.write(`<link href="${GL_LIB.css}" rel="stylesheet">` +
+    `<script src="${GL_LIB.js}"><\/script>`);
+</script>
 <style>
 :root {
   --cyan: #38e1d6; --amber: #ffb84d; --violet: #8c9aff;
@@ -165,9 +175,22 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dur = (ms) => reduced ? 0 : ms;
 
 /* =============================== MAP =============================== */
-const map = new maplibregl.Map({
+const GL = USE_MAPBOX ? mapboxgl : maplibregl;
+if (USE_MAPBOX) mapboxgl.accessToken = MAPBOX_TOKEN;
+const BLD = USE_MAPBOX
+  ? { source: "composite", layer: "building", minzoom: 13,
+      filter: ["==", ["get", "extrude"], "true"],
+      height: ["min", 320, ["coalesce", ["get", "height"], 8]],
+      base: ["coalesce", ["get", "min_height"], 0],
+      font: ["DIN Pro Regular", "Arial Unicode MS Regular"] }
+  : { source: "openmaptiles", layer: "building", minzoom: 12.5,
+      filter: true,
+      height: ["min", 320, ["coalesce", ["get", "render_height"], ["get", "height"], 8]],
+      base: ["coalesce", ["get", "render_min_height"], 0],
+      font: ["Noto Sans Regular"] };
+const map = new GL.Map({
   container: "map",
-  style: "https://tiles.openfreemap.org/styles/dark",
+  style: USE_MAPBOX ? "mapbox://styles/mapbox/dark-v11" : "https://tiles.openfreemap.org/styles/dark",
   center: [103.8400, 1.3250],
   zoom: 10.6,
   pitch: 45,
@@ -189,22 +212,39 @@ function arcCoords(h, a, steps = 56) {
   }
   return pts;
 }
-const ARCS = SITES.slice(1).map((s) => arcCoords(CHANGI, s.coords));
+// island-wide mesh: every asset links to its nearest neighbours — a web, not a hub
+const MESH_EDGES = (() => {
+  const edges = [], seen = new Set();
+  SITES.forEach((s, i) => {
+    SITES.map((t, j) => ({ j, d: Math.hypot(t.coords[0] - s.coords[0], t.coords[1] - s.coords[1]) }))
+      .filter((x) => x.j !== i)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 2)
+      .forEach(({ j }) => {
+        const key = Math.min(i, j) + "-" + Math.max(i, j);
+        if (!seen.has(key)) { seen.add(key); edges.push([i, j]); }
+      });
+  });
+  return edges;
+})();
+const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(SITES[a].coords, SITES[b].coords));
 
 /* --- real 3D buildings; lit state via feature-state ("amber" | "cyan") --- */
 let litFeatures = [], litSeen = new Set();
 function setupLayers() {
   const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
-  map.addLayer({
-    id: "bld-3d", type: "fill-extrusion", source: "openmaptiles", "source-layer": "building",
-    minzoom: 12.5,
+  const bldLayer = {
+    id: "bld-3d", type: "fill-extrusion", source: BLD.source, "source-layer": BLD.layer,
+    minzoom: BLD.minzoom,
     paint: {
       "fill-extrusion-color": "#0e1b28",
-      "fill-extrusion-height": ["min", 320, ["coalesce", ["get", "render_height"], ["get", "height"], 8]],
-      "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+      "fill-extrusion-height": BLD.height,
+      "fill-extrusion-base": BLD.base,
       "fill-extrusion-opacity": 0.92,
     },
-  }, firstSymbol);
+  };
+  if (BLD.filter !== true) bldLayer.filter = BLD.filter;
+  map.addLayer(bldLayer, firstSymbol);
 
   // lit buildings live in their own source: exact copied footprints, drawn over the base
   map.addSource("lit-bld", { type: "geojson",
@@ -240,7 +280,7 @@ function setupLayers() {
     layout: { "text-field": ["get", "label"], "text-size": 12,
       "text-variable-anchor": ["top", "bottom", "left", "right"],
       "text-radial-offset": 1.0, "text-justify": "auto",
-      "text-font": ["Noto Sans Regular"] },
+      "text-font": BLD.font },
     paint: { "text-color": "#eaf6f8", "text-halo-color": "#05080d", "text-halo-width": 1.5,
       "text-opacity": ["case", onState, 0.95, 0] } });
 
@@ -253,7 +293,7 @@ function setupLayers() {
     layout: { "line-cap": "round" },
     paint: { "line-width": 2.2,
       "line-gradient": ["interpolate", ["linear"], ["line-progress"],
-        0, "#ffb84d", 0.35, "#8c9aff", 1, "#38e1d6"] } }, "site-pulse");
+        0, "#8c9aff", 1, "#38e1d6"] } }, "site-pulse");
   map.addLayer({ id: "arc-flow", type: "line", source: "arcs",
     paint: { "line-color": "#dffdfb", "line-width": 2.4, "line-opacity": 0,
       "line-dasharray": [0, 4, 3] } }, "site-pulse");
@@ -273,7 +313,15 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150) {
       // the polygons actually near the site, drop the far-flung fragments
       const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates]
         : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates : [];
-      const kept = polys.filter((poly) => near(poly[0]));
+      // inflate ~2% around each polygon's centroid: the glow shell fully wraps the
+      // base building so no faces are coplanar (which z-fights and flickers)
+      const inflate = (poly) => poly.map((ring) => {
+        let cx = 0, cy = 0;
+        ring.forEach(([x, y]) => { cx += x; cy += y; });
+        cx /= ring.length; cy /= ring.length;
+        return ring.map(([x, y]) => [cx + (x - cx) * 1.02, cy + (y - cy) * 1.02]);
+      });
+      const kept = polys.filter((poly) => near(poly[0])).map(inflate);
       if (!kept.length) return;
       const key = JSON.stringify(kept[0][0][0]) + tone;
       if (litSeen.has(key)) return;
@@ -281,8 +329,8 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150) {
       const pr = f.properties || {};
       litFeatures.push({ type: "Feature", properties: {
           tone,
-          h: Math.min(320, pr.render_height ?? pr.height ?? 8),
-          b: pr.render_min_height ?? 0,
+          h: Math.min(320, (pr.render_height ?? pr.height ?? 8)) + 1.5,
+          b: pr.render_min_height ?? pr.min_height ?? 0,
         }, geometry: { type: "MultiPolygon", coordinates: kept } });
     });
     map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: litFeatures });
