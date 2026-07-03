@@ -405,7 +405,7 @@ const metrics = {
   eff:     { v: 0.62, t: 0.62, lo: 0.54, hi: 0.64, step: 0.012, cadence: 1400, next: 0 },
 };
 const sparkData = [];
-let setpoint = 23.5, setpointFlipped = false, effDriftStart = 0;
+let setpoint = 23.5, setpointFlipped = false, effDriftStart = 0, deltaTimer = 0;
 let topoEdges = [], topoNodes = [], topoFire = null, topoNext = 0;
 
 function buildTopo() {
@@ -642,7 +642,8 @@ const SCENES = [
         setpointFlipped = true; setpoint = 22.8;
         const d = $("#m-delta");
         d.classList.add("show");
-        setTimeout(() => d.classList.add("good"), 700);
+        clearTimeout(deltaTimer);
+        deltaTimer = setTimeout(() => d.classList.add("good"), 700);
       }
       if (ms > 13000 && !this._dolly) {
         this._dolly = true;
@@ -786,13 +787,27 @@ function resetVisualState() {
   $("#bloom").classList.remove("on");
   document.querySelectorAll("#stats .tile, #wall span").forEach((el) => el.classList.remove("in"));
   unlightChangiBuildings();
+  clearTimeout(deltaTimer);
+  $("#m-delta").classList.remove("show", "good");
+  setpoint = 23.5; setpointFlipped = false;
+}
+
+const MAP_HANDLERS = ["scrollZoom", "dragPan", "dragRotate", "doubleClickZoom", "touchZoomRotate", "keyboard"];
+function setMapInteraction(on) {
+  MAP_HANDLERS.forEach((h) => map[h][on ? "enable" : "disable"]());
 }
 
 function applyPreState(idx) {
   // world-state each scene expects on entry (for arbitrary jumps)
   if (idx <= 1) { allSitesOff(); }
-  if (idx === 2) { allSitesOff(); setSiteOn(0, true); $("#hvac-panel").classList.add("in");
-    $("#bloom").classList.add("on"); }
+  if (idx === 2) { // algorithm scene inherits the HVAC scene's end state
+    allSitesOff(); setSiteOn(0, true); sitesOnCount = 1;
+    $("#hvac-panel").classList.add("in");
+    $("#bloom").classList.add("on");
+    setpoint = 22.8; setpointFlipped = true;
+    metrics.eff.v = metrics.eff.t = 0.55;
+    $("#m-delta").classList.add("show", "good");
+  }
   if (idx === 3) { allSitesOff(); setSiteOn(0, true); sitesOnCount = 1; }
   if (idx >= 4) { allSitesOn(); }
   if (idx <= 4) { arcProgress = ARCS.map(() => 0); setArcData();
@@ -803,6 +818,8 @@ function applyPreState(idx) {
 
 function jumpTo(idx) {
   idx = clamp(idx, 0, SCENES.length - 1);
+  exploring = false;
+  setMapInteraction(false);
   if (curScene >= 0) SCENES[curScene].exit();
   resetVisualState();
   applyPreState(idx);
@@ -852,17 +869,19 @@ function buildControls() {
   const dots = $("#dots");
   SCENES.forEach((_, i) => {
     const d = document.createElement("i");
-    d.onclick = () => { exploring = false; playing = true; $("#btn-play").textContent = "❚❚"; jumpTo(i); };
+    d.onclick = () => { playing = true; $("#btn-play").textContent = "❚❚"; jumpTo(i); };
     dots.appendChild(d);
   });
   $("#btn-play").onclick = () => {
     playing = !playing;
     $("#btn-play").textContent = playing ? "❚❚" : "▶";
-    if (!playing) map.stop();
+    // note: the in-flight camera ease is left running on pause — stopping it
+    // would leave no way to resume the move without restarting the scene
   };
-  $("#btn-next").onclick = () => jumpTo(curScene + 1);
-  $("#btn-prev").onclick = () => jumpTo(curScene - 1);
-  $("#btn-replay").onclick = () => { exploring = false; playing = true;
+  const jumpBtn = (d) => { playing = true; $("#btn-play").textContent = "❚❚"; jumpTo(curScene + d); };
+  $("#btn-next").onclick = () => jumpBtn(1);
+  $("#btn-prev").onclick = () => jumpBtn(-1);
+  $("#btn-replay").onclick = () => { playing = true;
     $("#btn-play").textContent = "❚❚"; jumpTo(0); };
   $("#btn-explore").onclick = () => {
     exploring = true;
@@ -872,8 +891,7 @@ function buildControls() {
     arcProgress = ARCS.map(() => 1); setArcData();
     map.setPaintProperty("arc-flow", "line-opacity", 0.9);
     map.stop();
-    ["scrollZoom", "dragPan", "dragRotate", "doubleClickZoom", "touchZoomRotate", "keyboard"]
-      .forEach((h) => map[h].enable());
+    setMapInteraction(true);
     map.easeTo({ center: [103.8500, 1.3300], zoom: 11, pitch: 40, duration: 1500 });
   };
 }
