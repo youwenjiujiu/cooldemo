@@ -1,9 +1,9 @@
-# Island Grid — Singapore Energy 3D Story Animation
+# Univers · AIP for Physical Infrastructure — Singapore Story Animation
 
-A fully animated, sci-fi styled 3D story (three.js + bloom post-processing) for a
-Singapore-based renewable-energy IoT company. Neon wireframe Singapore coastline,
-glowing tower assets, particle energy flows, cinematic text captions — **no stats,
-no dashboards, pure narrative animation**.
+A fully animated cinematic demo on the **real Singapore map**: real 3D building
+extrusions light up (Changi terminals in amber, CBD client towers in cyan), a mock
+portfolio sweeps the whole island, and every asset weaves into an island-wide mesh
+network. All narrative is **text-only captions — no numeric stats on screen**.
 
 ## Run
 
@@ -12,28 +12,40 @@ python3 -m http.server 8000
 # open http://localhost:8000/index.html
 ```
 
-Needs network access only for the three.js CDN. `coast.js` (real OSM coastline of
-Singapore Island, simplified) is bundled locally.
+## Basemap / token
 
-## The animation (~55 s, then endless slow orbit)
+`config.js` holds the Mapbox token:
+- Token set (current) → **Mapbox navigation-night-v1**: bright readable night map,
+  live traffic colors, detailed building footprints.
+- Token empty → falls back to free **MapLibre + OpenFreeMap dark**, no token needed.
+
+The `pk.` public token is standard frontend usage, but add a URL allowlist in the
+Mapbox dashboard before publishing this repo anywhere public.
+
+## The animation (~72 s, then endless slow orbit)
 
 | Phase | What happens |
 |-------|--------------|
-| Outline | Neon coastline draws itself over a dark grid; brand title |
-| City | Hundreds of dark city blocks rise from the island |
-| Changi | Camera dives to Changi; an amber beacon ignites with orbiting fireflies; captions about real-time HVAC retuning |
-| Assets | Pull back; client towers ignite one by one with name labels (fanned out around the CBD cluster) |
-| Fabric | Violet energy arcs shoot from Changi to every asset; particles flow along them |
-| Finale | Slow hero orbit; tagline + client name wall (text only); Replay |
+| Intro | Island overview, "RUN AS ONE" title, first caption |
+| Changi | Fly to Changi; the real T1/T2/T3 terminal buildings ignite amber; orbiting camera; captions about real-time HVAC retuning |
+| CBD | Fly to Raffles Place / Marina Bay; real client towers ignite cyan (DBS, OCBC, NGS, Frasers, WITH) |
+| Island | Pull back; 11 hero clients light one by one, then 24 mock assets sweep the island; a nearest-neighbour mesh (a web, not a hub) connects all 35 sites |
+| Finale | "One ontology — every signal, one language" + text outcomes + client wall; slow endless orbit |
 
-Controls: `Skip ▸▸` (bottom-right) advances a phase; `Replay` restarts.
+Controls: `Skip ▸▸` advances a phase; `Replay` restarts.
 
 ## Customize
 
-- **Brand**: the `#title` block (`ISLAND GRID` placeholder) and `<title>`.
-- **Sites**: the `SITES` constant (org label, lng/lat, tower height).
-- **Captions**: the `CAPS` object — all narrative text lives there.
-- **Pacing**: each phase's `dur` in the `PHASES` array.
-- **Look**: bloom parameters (`UnrealBloomPass`), colors in `:root` CSS and materials.
+- **Clients**: `SITES` (hero, big dots + finale wall) and `MOCK_SITES` (island
+  coverage, small dots) at the top of `index.html`.
+- **Captions / copy**: the `CAPS` object, `#title` and `#finale` markup.
+- **Pacing**: each phase's `dur` in `PHASES`.
+- **Building lighting**: `lightBuildingsAt(coords, tone, radiusPx, maxMeters)` calls
+  in the Changi/CBD phases.
 
-`map-story.html` is the earlier MapLibre map-based 6-scene version, kept for reference.
+## Other versions kept for reference
+
+- `neon-story.html` — stylized three.js neon 3D version (self-contained, no map
+  tiles; also published as a claude.ai artifact).
+- `map-story.html` — earliest MapLibre dashboard-style version with HVAC panel and
+  numeric stats.
