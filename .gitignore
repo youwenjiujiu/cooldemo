@@ -1,0 +1,8 @@
+# Unreal — generated/downloaded, never commit
+unreal/Plugins/
+unreal/Binaries/
+unreal/Intermediate/
+unreal/DerivedDataCache/
+unreal/Saved/
+unreal/Content/**/*.uasset
+unreal/Content/**/*.umap
