@@ -42,16 +42,6 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 #title .sub { font-size: clamp(13px, 1.5vw, 18px); color: var(--muted); letter-spacing: .08em; }
 #title .sub b { color: var(--cyan); font-weight: 600; }
 
-/* cinematic captions */
-#caption { position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%);
-  max-width: 880px; width: 92vw; text-align: center; z-index: 10; pointer-events: none; }
-#caption .line { font-size: clamp(17px, 2.1vw, 26px); font-weight: 500; letter-spacing: .06em;
-  line-height: 1.5; color: var(--text); opacity: 0; transform: translateY(14px);
-  transition: opacity .9s ease, transform .9s cubic-bezier(.16,1,.3,1);
-  text-shadow: 0 2px 24px rgba(0,0,0,.95), 0 0 40px rgba(56,225,214,.18); }
-#caption .line.in { opacity: 1; transform: translateY(0); }
-#caption .line em { font-style: normal; color: var(--cyan); }
-#caption .line b { font-weight: 600; color: var(--amber); }
 
 /* story chapter tag (top-left) */
 #chapter { position: absolute; top: 26px; left: 30px; z-index: 10; pointer-events: none;
@@ -78,13 +68,13 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 .fault-card .ln.dispatch::before { color: var(--violet); } .fault-card .ln.dispatch b { color: var(--violet); }
 .fault-card .ln.done::before { color: #4dffa6; } .fault-card .ln.done b { color: #4dffa6; }
 .fault-card b { font-weight: 600; }
+.fault-card.tune { border-color: rgba(56,225,214,.5); width: 262px; }
+.fault-card .ln.sense::before { color: var(--cyan); } .fault-card .ln.sense b { color: var(--cyan); }
+.fault-card .ln.predict::before { color: var(--violet); } .fault-card .ln.predict b { color: var(--violet); }
+.fault-card .ln.act::before { color: var(--amber); } .fault-card .ln.act b { color: var(--amber); }
+.fault-card canvas { width: 100%; height: 44px; display: none; margin-top: 8px; }
+.fault-card canvas.show { display: block; }
 
-/* location tag (small eyebrow above captions during close-ups) */
-#loctag { position: absolute; left: 50%; bottom: calc(10% + 74px); transform: translateX(-50%);
-  font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--amber);
-  z-index: 10; opacity: 0; transition: opacity .8s ease; pointer-events: none;
-  text-shadow: 0 2px 16px rgba(0,0,0,.9); }
-#loctag.in { opacity: .95; }
 
 /* finale */
 #finale { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -149,8 +139,6 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 </div>
 
 <div id="chapter"></div>
-<div id="loctag"></div>
-<div id="caption"><div class="line" id="cap-line"></div></div>
 
 <div id="finale">
   <h2>One ontology — every signal, one language.</h2>
@@ -214,16 +202,6 @@ const CHANGI = SITES[0].coords;
 const CHANGI_TERMINALS = [103.9885, 1.3590]; // T1/T3 building cluster, for close-up lighting
 const CBD = [103.8500, 1.2825];
 
-/* All narrative is text — no numeric stats anywhere. */
-const CAPS = {
-  city:    'Every building on this island consumes energy — <em>most of it for cooling</em>.',
-  changi1: 'At <b>Changi Airport</b>, our AI retunes the cooling plant <em>in real time</em> —',
-  changi2: '— sensing every arriving flight, every surge of passengers, every shift in the weather.',
-  assets:  'Banks. Ports. Ministries. Galleries. Housing. <em>One by one, assets come online.</em>',
-  fabric:  'One portfolio, one energy picture — <em>managed as a single system</em>, island-wide.',
-  ioc1:    'The <em>Intelligent Operations Centre</em> watches every asset, around the clock.',
-  ioc2:    'Faults are <b>detected</b>, <b>diagnosed</b> and <b>dispatched</b> — before anyone on site notices.',
-};
 
 /* FDD storyline: fault events popping across the island in the IoC phase */
 const FAULTS = [
@@ -462,24 +440,8 @@ function pinBloom(el, lngLat) {
 
 /* =============================== UI =============================== */
 const $title = $("#title"), $finale = $("#finale"), $replay = $("#replay");
-const $cap = $("#cap-line"), $loc = $("#loctag");
 $("#clients").innerHTML = SITES.map((s) => `<span>${s.org}</span>`).join("");
 
-let capToken = 0;
-function caption(html) {
-  const token = ++capToken;
-  $cap.classList.remove("in");
-  setTimeout(() => {
-    if (token !== capToken) return;
-    $cap.innerHTML = html;
-    $cap.classList.add("in");
-  }, 350);
-}
-function captionOut() { capToken++; $cap.classList.remove("in"); }
-function loctag(text) {
-  if (!text) { $loc.classList.remove("in"); return; }
-  $loc.textContent = text; $loc.classList.add("in");
-}
 const $chapter = $("#chapter");
 function chapter(html) {
   if (!html) { $chapter.classList.remove("in"); return; }
@@ -529,6 +491,53 @@ function clearFaults() {
   faultCards.clear();
 }
 
+/* --- Changi AI-tuning card: the story told on the building itself --- */
+let tuneEl = null, tuneSeed = [];
+function tuneCard() {
+  if (tuneEl) return tuneEl;
+  tuneEl = document.createElement("div");
+  tuneEl.className = "fault-card tune";
+  tuneEl.innerHTML = `<div class="site">Changi Airport · Terminals</div>
+    <div class="ln sense"><span><b>Sensing</b> — flights · passengers · weather</span></div>
+    <div class="ln predict"><span><b>Predicting</b> — cooling demand ahead</span></div>
+    <div class="ln act"><span><b>Acting</b> — setpoints retuned live</span></div>
+    <canvas width="236" height="44"></canvas>`;
+  document.body.appendChild(tuneEl);
+  tuneSeed = Array.from({ length: 90 }, () => Math.random() * 2 - 1);
+  return tuneEl;
+}
+function updateTuneCard(ms, anchor) {
+  const t = ms - 5800; // appears once the terminals have ignited
+  if (t < 0) return;
+  const el = tuneCard();
+  el.classList.add("in");
+  [["sense", 0], ["predict", 1600], ["act", 3200]].forEach(([cls, at]) =>
+    el.querySelector(".ln." + cls).classList.toggle("show", t >= at));
+  const cv = el.querySelector("canvas");
+  cv.classList.toggle("show", t >= 4600);
+  if (t >= 4600) {
+    // jittery load settling into a smooth optimized line as the AI takes over
+    const c = cv.getContext("2d");
+    c.clearRect(0, 0, cv.width, cv.height);
+    const settle = clamp((t - 4600) / 6000, 0, 1);
+    c.beginPath();
+    for (let i = 0; i < 90; i++) {
+      const x = (i / 89) * cv.width;
+      const drift = Math.sin(i / 8 + ms / 900) * 4;
+      const noise = tuneSeed[i] * 12 * (1 - settle * clamp(i / 60, 0, 1));
+      const y = cv.height * 0.55 + drift + noise;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.strokeStyle = settle > 0.6 ? "#4dffa6" : "#ffb84d";
+    c.lineWidth = 1.6; c.stroke();
+  }
+  const p = map.project(anchor);
+  el.style.left = p.x + "px"; el.style.top = p.y + "px";
+}
+function clearTuneCard() {
+  if (tuneEl) { tuneEl.remove(); tuneEl = null; }
+}
+
 /* =============================== PHASES =============================== */
 const PHASES = [
   { name: "intro", dur: 9000,
@@ -537,13 +546,11 @@ const PHASES = [
       map.jumpTo({ center: [103.8400, 1.3250], zoom: 10.6, pitch: 45, bearing: -15 });
       map.easeTo({ zoom: 11.05, pitch: 52, bearing: -4, duration: dur(8200), easing: easeInOutCubic });
       $title.classList.add("in");
-      caption("");
     },
     update(ms) {
-      if (ms > 4200 && !this._c) { this._c = true; caption(CAPS.city); }
       if (ms > 7600) $title.classList.add("out");
     },
-    exit() { this._c = false; $title.classList.remove("in", "out"); captionOut(); } },
+    exit() { this._c = false; $title.classList.remove("in", "out"); } },
 
   { name: "changi", dur: 17000,
     enter() {
@@ -559,18 +566,15 @@ const PHASES = [
         lightBuildingsAt(CHANGI_TERMINALS, "amber", 260, 700);
         $("#bloom-changi").classList.add("on");
         igniteSite(0);
-        loctag("Changi Airport · Terminal Three");
       }
       if (ms > 5600 && !this._orbit) {
         this._orbit = true;
         map.easeTo({ bearing: 95, pitch: 58, duration: dur(11000), easing: (t) => t });
       }
-      if (ms > 5000 && !this._c1) { this._c1 = true; caption(CAPS.changi1); }
-      if (ms > 10600 && !this._c2) { this._c2 = true; caption(CAPS.changi2); }
-      if (ms > 15600) { captionOut(); loctag(""); }
+      updateTuneCard(ms, CHANGI_TERMINALS);
       pinBloom($("#bloom-changi"), CHANGI_TERMINALS);
     },
-    exit() { captionOut(); loctag(""); } },
+    exit() { clearTuneCard(); } },
 
   { name: "cbd", dur: 15000,
     enter() {
@@ -579,7 +583,6 @@ const PHASES = [
       map.flyTo({ center: CBD, zoom: 15.0, pitch: 60, bearing: -35,
         duration: dur(4800), curve: 1.4, easing: easeInOutCubic });
       chapter('Chapter · <b>Energy Management</b>');
-      caption("");
       this._lit = false; this._orbit = false; this._c = false;
     },
     update(ms, now) {
@@ -592,17 +595,14 @@ const PHASES = [
           igniteSite(s.id);
         }
         $("#bloom-cbd").classList.add("on");
-        loctag("Raffles Place · Marina Bay");
       }
-      if (ms > 5300 && !this._c) { this._c = true; caption(CAPS.assets); }
       if (ms > 5600 && !this._orbit) {
         this._orbit = true;
         map.easeTo({ bearing: 25, duration: dur(8800), easing: (t) => t });
       }
-      if (ms > 13600) { captionOut(); loctag(""); }
       pinBloom($("#bloom-cbd"), CBD);
     },
-    exit() { captionOut(); loctag(""); $("#bloom-cbd").classList.remove("on"); } },
+    exit() { $("#bloom-cbd").classList.remove("on"); } },
 
   { name: "island", dur: 17000,
     enter() {
@@ -610,7 +610,6 @@ const PHASES = [
       unlightBuildings();
       map.flyTo({ center: [103.8520, 1.3180], zoom: 11.35, pitch: 50, bearing: -8,
         duration: dur(4200), curve: 1.35, easing: easeInOutCubic });
-      caption("");
       this._c = false; this._orbit = false;
       arcProgress = ARCS.map(() => 0);
       map.setPaintProperty("arc-flow", "line-opacity", 0);
@@ -620,7 +619,6 @@ const PHASES = [
       // hero clients ignite one by one, then the mock portfolio sweeps the island
       SITES.forEach((s, i) => { if (i > 0 && ms > 2600 + i * 520) igniteSite(s.id); });
       MOCK_SITES.forEach((m, i) => { if (ms > 6400 + i * 160) igniteSite(m.id); });
-      if (ms > 4400 && !this._c) { this._c = true; caption(CAPS.fabric); }
       if (ms > 5400 && !this._orbit) {
         this._orbit = true;
         map.easeTo({ bearing: 10, duration: dur(9200), easing: (t) => t });
@@ -638,13 +636,11 @@ const PHASES = [
         map.setPaintProperty("arc-flow", "line-opacity", 0.9);
       }
       if (this._flow) tickDashFlow(now);
-      if (ms > 13800) captionOut();
     },
     exit() {
       allSitesOn();
       arcProgress = ARCS.map(() => 1); setArcData();
       map.setPaintProperty("arc-flow", "line-opacity", 0.9);
-      captionOut();
     } },
 
   { name: "ioc", dur: 15000,
@@ -653,16 +649,13 @@ const PHASES = [
       map.easeTo({ center: [103.8420, 1.3480], zoom: 11.6, pitch: 46, bearing: 4,
         duration: dur(13500), easing: (t) => t });
       chapter('Chapter · <b>Intelligent Operations Centre · FDD</b>');
-      caption(CAPS.ioc1);
       this._c2 = false;
     },
     update(ms, now) {
-      if (ms > 4200 && !this._c2) { this._c2 = true; caption(CAPS.ioc2); }
       updateFaults(ms);
       tickDashFlow(now);
-      if (ms > 13800) captionOut();
     },
-    exit() { clearFaults(); captionOut(); } },
+    exit() { clearFaults(); } },
 
   { name: "finale", dur: Infinity,
     enter() {
@@ -705,7 +698,8 @@ function resetWorld() {
   if (map.getLayer("arc-flow")) map.setPaintProperty("arc-flow", "line-opacity", 0);
   ["#bloom-changi", "#bloom-cbd"].forEach((s) => $(s).classList.remove("on"));
   clearFaults();
-  captionOut(); loctag(""); chapter("");
+  clearTuneCard();
+  chapter("");
 }
 function jumpTo(idx) {
   idx = clamp(idx, 0, PHASES.length - 1);
