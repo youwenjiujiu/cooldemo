@@ -53,6 +53,32 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 #caption .line em { font-style: normal; color: var(--cyan); }
 #caption .line b { font-weight: 600; color: var(--amber); }
 
+/* story chapter tag (top-left) */
+#chapter { position: absolute; top: 26px; left: 30px; z-index: 10; pointer-events: none;
+  font-size: 12px; letter-spacing: .28em; text-transform: uppercase; color: var(--text);
+  opacity: 0; transition: opacity .8s ease; text-shadow: 0 2px 14px rgba(0,0,0,.9); }
+#chapter b { color: var(--cyan); font-weight: 600; }
+#chapter.in { opacity: .95; }
+
+/* FDD fault cards */
+.fault-card { position: absolute; z-index: 11; pointer-events: none; width: 250px;
+  transform: translate(14px, -50%); background: rgba(10,16,24,.88);
+  border: 1px solid rgba(255,107,93,.5); border-radius: 10px; padding: 10px 13px;
+  backdrop-filter: blur(10px); opacity: 0; transition: opacity .5s ease, border-color .6s ease; }
+.fault-card.in { opacity: 1; }
+.fault-card.resolved { border-color: rgba(77,255,166,.55); }
+.fault-card .site { font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px; }
+.fault-card .ln { font-size: 11.5px; line-height: 1.45; display: none; align-items: baseline;
+  gap: 7px; color: var(--text); }
+.fault-card .ln::before { content: "▸"; font-size: 9px; flex: none; }
+.fault-card .ln.show { display: flex; }
+.fault-card .ln.detect::before { color: #ff6b5d; } .fault-card .ln.detect b { color: #ff6b5d; }
+.fault-card .ln.diag::before { color: var(--amber); } .fault-card .ln.diag b { color: var(--amber); }
+.fault-card .ln.dispatch::before { color: var(--violet); } .fault-card .ln.dispatch b { color: var(--violet); }
+.fault-card .ln.done::before { color: #4dffa6; } .fault-card .ln.done b { color: #4dffa6; }
+.fault-card b { font-weight: 600; }
+
 /* location tag (small eyebrow above captions during close-ups) */
 #loctag { position: absolute; left: 50%; bottom: calc(10% + 74px); transform: translateX(-50%);
   font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--amber);
@@ -122,6 +148,7 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   <div class="sub"><b>Energy · Assets · People · Space · Environment</b> — from energy efficiency to a grid-interactive city</div>
 </div>
 
+<div id="chapter"></div>
 <div id="loctag"></div>
 <div id="caption"><div class="line" id="cap-line"></div></div>
 
@@ -193,8 +220,20 @@ const CAPS = {
   changi1: 'At <b>Changi Airport</b>, our AI retunes the cooling plant <em>in real time</em> —',
   changi2: '— sensing every arriving flight, every surge of passengers, every shift in the weather.',
   assets:  'Banks. Ports. Ministries. Galleries. Housing. <em>One by one, assets come online.</em>',
-  fabric:  'Together they run as one — <em>sense, predict, decide, act</em> — across the whole city.',
+  fabric:  'One portfolio, one energy picture — <em>managed as a single system</em>, island-wide.',
+  ioc1:    'The <em>Intelligent Operations Centre</em> watches every asset, around the clock.',
+  ioc2:    'Faults are <b>detected</b>, <b>diagnosed</b> and <b>dispatched</b> — before anyone on site notices.',
 };
+
+/* FDD storyline: fault events popping across the island in the IoC phase */
+const FAULTS = [
+  { siteKey: "hdb",   start: 2200,
+    detect: "Chiller efficiency drift", cause: "Condenser fouling" },
+  { siteKey: "mock6", start: 5200,   // Woodlands Health Campus
+    detect: "AHU supply-air anomaly", cause: "Stuck damper actuator" },
+  { siteKey: "mock14", start: 8200,  // Tampines Regional Centre
+    detect: "Cooling-tower vibration", cause: "Fan bearing wear" },
+];
 
 /* =============================== HELPERS =============================== */
 const $ = (s) => document.querySelector(s);
@@ -298,13 +337,16 @@ function setupLayers() {
   }});
   const onState = ["boolean", ["feature-state", "on"], false];
   const isHero = ["==", ["get", "tier"], "hero"];
+  const faultState = ["boolean", ["feature-state", "fault"], false];
   map.addLayer({ id: "site-pulse", type: "circle", source: "sites",
-    paint: { "circle-radius": 0, "circle-color": "#38e1d6", "circle-opacity": 0,
+    paint: { "circle-radius": 0,
+      "circle-color": ["case", faultState, "#ff6b5d", "#38e1d6"],
+      "circle-opacity": 0,
       "circle-blur": 0.6, "circle-pitch-alignment": "map" } });
   map.addLayer({ id: "site-core", type: "circle", source: "sites",
     paint: {
       "circle-radius": ["case", onState, ["case", isHero, 5, 3.5], 0],
-      "circle-color": ["case", isHero, "#38e1d6", "#2fb9b0"],
+      "circle-color": ["case", faultState, "#ff6b5d", ["case", isHero, "#38e1d6", "#2fb9b0"]],
       "circle-stroke-color": "#eaffff", "circle-stroke-width": ["case", onState, ["case", isHero, 1, 0.5], 0],
       "circle-opacity": ["case", onState, 1, 0],
     } });
@@ -438,6 +480,54 @@ function loctag(text) {
   if (!text) { $loc.classList.remove("in"); return; }
   $loc.textContent = text; $loc.classList.add("in");
 }
+const $chapter = $("#chapter");
+function chapter(html) {
+  if (!html) { $chapter.classList.remove("in"); return; }
+  $chapter.innerHTML = html; $chapter.classList.add("in");
+}
+
+/* --- FDD fault cards --- */
+const faultCards = new Map(); // siteKey -> DOM element
+function faultSite(key) { return ALL_SITES.find((s) => s.key === key); }
+function faultCard(f) {
+  let el = faultCards.get(f.siteKey);
+  if (el) return el;
+  const s = faultSite(f.siteKey);
+  el = document.createElement("div");
+  el.className = "fault-card";
+  el.innerHTML = `<div class="site">${s.org}</div>
+    <div class="ln detect"><span><b>Fault detected</b> — ${f.detect}</span></div>
+    <div class="ln diag"><span><b>Diagnosed</b> — ${f.cause}</span></div>
+    <div class="ln dispatch"><span><b>Work order dispatched</b></span></div>
+    <div class="ln done"><span><b>Resolved</b> — performance restored</span></div>`;
+  document.body.appendChild(el);
+  faultCards.set(f.siteKey, el);
+  return el;
+}
+function updateFaults(ms) {
+  FAULTS.forEach((f) => {
+    const t = ms - f.start;
+    const s = faultSite(f.siteKey);
+    if (t < 0) return;
+    const el = faultCard(f);
+    const stages = [["detect", 0], ["diag", 1800], ["dispatch", 3600], ["done", 5200]];
+    stages.forEach(([cls, at]) =>
+      el.querySelector(".ln." + cls).classList.toggle("show", t >= at));
+    el.classList.toggle("in", t >= 0 && t < 8600);
+    el.classList.toggle("resolved", t >= 5200);
+    map.setFeatureState({ source: "sites", id: s.id }, { fault: t >= 0 && t < 5200 });
+    const p = map.project(s.coords);
+    el.style.left = p.x + "px"; el.style.top = p.y + "px";
+  });
+}
+function clearFaults() {
+  FAULTS.forEach((f) => {
+    const s = faultSite(f.siteKey);
+    map.setFeatureState({ source: "sites", id: s.id }, { fault: false });
+  });
+  faultCards.forEach((el) => el.remove());
+  faultCards.clear();
+}
 
 /* =============================== PHASES =============================== */
 const PHASES = [
@@ -460,6 +550,7 @@ const PHASES = [
       map.stop();
       map.flyTo({ center: CHANGI_TERMINALS, zoom: 15.6, pitch: 62, bearing: 15,
         duration: dur(5000), curve: 1.45, easing: easeInOutCubic });
+      chapter('Chapter · <b>Energy Efficiency</b>');
       this._lit = false; this._orbit = false; this._c1 = this._c2 = false;
     },
     update(ms, now) {
@@ -487,6 +578,7 @@ const PHASES = [
       $("#bloom-changi").classList.remove("on");
       map.flyTo({ center: CBD, zoom: 15.0, pitch: 60, bearing: -35,
         duration: dur(4800), curve: 1.4, easing: easeInOutCubic });
+      chapter('Chapter · <b>Energy Management</b>');
       caption("");
       this._lit = false; this._orbit = false; this._c = false;
     },
@@ -555,9 +647,27 @@ const PHASES = [
       captionOut();
     } },
 
+  { name: "ioc", dur: 15000,
+    enter() {
+      map.stop();
+      map.easeTo({ center: [103.8420, 1.3480], zoom: 11.6, pitch: 46, bearing: 4,
+        duration: dur(13500), easing: (t) => t });
+      chapter('Chapter · <b>Intelligent Operations Centre · FDD</b>');
+      caption(CAPS.ioc1);
+      this._c2 = false;
+    },
+    update(ms, now) {
+      if (ms > 4200 && !this._c2) { this._c2 = true; caption(CAPS.ioc2); }
+      updateFaults(ms);
+      tickDashFlow(now);
+      if (ms > 13800) captionOut();
+    },
+    exit() { clearFaults(); captionOut(); } },
+
   { name: "finale", dur: Infinity,
     enter() {
       map.stop();
+      chapter("");
       map.easeTo({ center: [103.8520, 1.3180], zoom: 11.2, pitch: 52, bearing: 40,
         duration: dur(26000), easing: (t) => t });
       $finale.classList.add("in");
@@ -594,7 +704,8 @@ function resetWorld() {
   arcProgress = ARCS.map(() => 0); setArcData();
   if (map.getLayer("arc-flow")) map.setPaintProperty("arc-flow", "line-opacity", 0);
   ["#bloom-changi", "#bloom-cbd"].forEach((s) => $(s).classList.remove("on"));
-  captionOut(); loctag("");
+  clearFaults();
+  captionOut(); loctag(""); chapter("");
 }
 function jumpTo(idx) {
   idx = clamp(idx, 0, PHASES.length - 1);
