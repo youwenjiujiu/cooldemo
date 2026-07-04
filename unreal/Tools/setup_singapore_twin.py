@@ -70,14 +70,20 @@ def setup_cesium(keys):
         unreal.log_warning("SunSky time props: {}".format(e))
 
     tiles = spawn(unreal.Cesium3DTileset, "CityTileset")
-    if keys.get("google_tiles_key"):
+    if keys.get("cesium_ion_token") and not keys.get("prefer_osm_buildings"):
+        # Google Photorealistic 3D Tiles served through Cesium ion (asset 2275207)
+        tiles.set_editor_property("tileset_source", unreal.TilesetSource.FROM_CESIUM_ION)
+        tiles.set_editor_property("ion_asset_id", 2275207)
+        tiles.set_editor_property("ion_access_token", keys["cesium_ion_token"])
+        unreal.log("CityTileset -> Google Photorealistic 3D Tiles (via ion)")
+    elif keys.get("google_tiles_key"):
         tiles.set_editor_property("tileset_source", unreal.TilesetSource.FROM_URL)
         tiles.set_editor_property(
             "url",
             "https://tile.googleapis.com/v1/3dtiles/root.json?key="
             + keys["google_tiles_key"],
         )
-        unreal.log("CityTileset -> Google Photorealistic 3D Tiles")
+        unreal.log("CityTileset -> Google Photorealistic 3D Tiles (direct)")
     elif keys.get("cesium_ion_token"):
         tiles.set_editor_property("tileset_source", unreal.TilesetSource.FROM_CESIUM_ION)
         tiles.set_editor_property("ion_asset_id", 96188)  # OSM Buildings

@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.5",
+	"EngineAssociation": "5.8",
 	"Category": "Simulation",
 	"Description": "Island Grid — interactive Singapore energy digital twin (Univers AIP). Photorealistic Cesium globe, clickable assets, three storylines: Energy Efficiency, Energy Management, IoC + FDD.",
 	"Plugins": [
