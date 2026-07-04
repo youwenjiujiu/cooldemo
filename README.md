@@ -49,3 +49,11 @@ Controls: `Skip ▸▸` advances a phase; `Replay` restarts.
   tiles; also published as a claude.ai artifact).
 - `map-story.html` — earliest MapLibre dashboard-style version with HVAC panel and
   numeric stats.
+
+## Unreal 5 interactive twin (in progress)
+
+`unreal/` holds the UE 5.5 + Cesium project scaffold for the clickable, game-feel
+version: photorealistic Google 3D Tiles Singapore, free-fly + clickable assets,
+the same three storylines. Start with `unreal/README-SETUP.md`; architecture and
+roadmap in `unreal/DESIGN.md`. Site/fault data in `unreal/Content/Data/` mirrors
+the web version's `SITES`/`FAULTS`.

@@ -1,0 +1,21 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.5",
+	"Category": "Simulation",
+	"Description": "Island Grid — interactive Singapore energy digital twin (Univers AIP). Photorealistic Cesium globe, clickable assets, three storylines: Energy Efficiency, Energy Management, IoC + FDD.",
+	"Plugins": [
+		{
+			"Name": "CesiumForUnreal",
+			"Enabled": true,
+			"MarketplaceURL": "https://fab.com/s/cesium-for-unreal"
+		},
+		{
+			"Name": "Niagara",
+			"Enabled": true
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true
+		}
+	]
+}

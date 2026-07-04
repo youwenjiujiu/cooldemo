@@ -1,0 +1,4 @@
+Name,SiteKey,Detect,Cause,StartSeconds
+fault_hdb,hdb,Chiller efficiency drift,Condenser fouling,2.2
+fault_woodlands,mock6,AHU supply-air anomaly,Stuck damper actuator,5.2
+fault_tampines,mock14,Cooling-tower vibration,Fan bearing wear,8.2
