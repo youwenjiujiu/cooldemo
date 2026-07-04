@@ -6,3 +6,4 @@ unreal/DerivedDataCache/
 unreal/Saved/
 unreal/Content/**/*.uasset
 unreal/Content/**/*.umap
+unreal/keys.json
