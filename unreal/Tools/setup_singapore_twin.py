@@ -115,8 +115,11 @@ def spawn_beacons(geo):
         if label in existing:
             continue
         hero = row["Tier"] == "Hero"
-        actor = eas.spawn_actor_from_class(
-            unreal.StaticMeshActor, unreal.Vector(0, 0, 0))
+        # georeference origin is fixed, so a static placement is enough:
+        # convert lng/lat/height straight to level coordinates
+        pos = geo.transform_longitude_latitude_height_position_to_unreal(
+            unreal.Vector(float(row["Longitude"]), float(row["Latitude"]), 90.0))
+        actor = eas.spawn_actor_from_class(unreal.StaticMeshActor, pos)
         actor.set_actor_label(label)
         actor.set_folder_path("Beacons")
         mesh_comp = actor.static_mesh_component
@@ -125,11 +128,6 @@ def spawn_beacons(geo):
         h = 3.0 if hero else 1.6  # pillar height multiplier
         actor.set_actor_scale3d(unreal.Vector(0.6 if hero else 0.35,
                                               0.6 if hero else 0.35, h))
-        anchor = unreal.CesiumGlobeAnchorComponent
-        comp = actor.add_component_by_class(anchor, False, unreal.Transform(), False)
-        comp.set_editor_property("georeference", geo)
-        comp.move_to_longitude_latitude_height(
-            unreal.Vector(float(row["Longitude"]), float(row["Latitude"]), 60.0))
         unreal.log("beacon " + row["Org"])
 
     unreal.log("Beacons: {} sites processed".format(len(rows)))
