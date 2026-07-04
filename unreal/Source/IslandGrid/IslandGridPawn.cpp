@@ -185,7 +185,13 @@ void AIslandGridPawn::OnClick(const FInputActionValue&)
 	FHitResult Hit;
 	if (!PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit)) return;
 	AAssetBeacon* Beacon = Cast<AAssetBeacon>(Hit.GetActor());
-	if (!Beacon) return;
+	if (!Beacon)
+	{
+		// clicked the city: dismiss the current card
+		if (Focused) { Focused->SetSelected(false); Focused = nullptr; }
+		bFlying = false;
+		return;
+	}
 
 	if (Focused) Focused->SetSelected(false);
 	Focused = Beacon;
@@ -210,7 +216,7 @@ void AIslandGridPawn::Tick(float DeltaSeconds)
 		FCollisionQueryParams Q(SCENE_QUERY_STAT(AltGuard), false, this);
 		if (GetWorld()->LineTraceSingleByChannel(
 				Ground, P + FVector(0, 0, 200000.f), P - FVector(0, 0, 1000000.f),
-				ECC_Visibility, Q))
+				ECC_WorldStatic, Q))
 		{
 			const float MinZ = Ground.ImpactPoint.Z + 4000.f;
 			if (P.Z < MinZ)

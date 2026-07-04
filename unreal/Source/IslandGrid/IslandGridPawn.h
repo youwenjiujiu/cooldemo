@@ -26,6 +26,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
+	AAssetBeacon* GetFocusedBeacon() const { return Focused; }
+
 protected:
 	virtual void BeginPlay() override;
 

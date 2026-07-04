@@ -17,8 +17,10 @@ AAssetBeacon::AAssetBeacon()
 
 	Pillar = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Pillar"));
 	Pillar->SetupAttachment(Root);
+	// clickable via the visibility channel only — never blocks flight or the altitude guard
 	Pillar->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Pillar->SetCollisionResponseToAllChannels(ECR_Block);
+	Pillar->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Pillar->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	Pillar->SetMobility(EComponentMobility::Movable);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
@@ -45,15 +47,16 @@ AAssetBeacon::AAssetBeacon()
 void AAssetBeacon::ApplyAppearance()
 {
 	const bool bHero = Tier == EBeaconTier::Hero;
-	const float H = bHero ? 26.f : 12.f;      // pillar half-height in metres-ish
-	const float R = bHero ? 0.45f : 0.28f;
+	const float HeightM = bHero ? 380.f : 220.f;  // rises above the CBD skyline
+	const float WidthM = bHero ? 16.f : 9.f;
 
-	Pillar->SetRelativeScale3D(FVector(R, R, H / 0.5f));
-	Pillar->SetRelativeLocation(FVector(0, 0, H * 100.f));
+	// engine cylinder is 1m x 1m; scale is in metres directly
+	Pillar->SetRelativeScale3D(FVector(WidthM, WidthM, HeightM));
+	Pillar->SetRelativeLocation(FVector(0, 0, HeightM * 50.f));
 
 	Label->SetText(FText::FromString(Org));
-	Label->SetWorldSize(bHero ? 2600.f : 1500.f);
-	Label->SetRelativeLocation(FVector(0, 0, H * 200.f + 2800.f));
+	Label->SetWorldSize(bHero ? 5200.f : 3200.f);
+	Label->SetRelativeLocation(FVector(0, 0, HeightM * 100.f + 4500.f));
 }
 
 void AAssetBeacon::OnConstruction(const FTransform& Transform)
