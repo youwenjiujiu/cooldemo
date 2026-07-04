@@ -65,7 +65,7 @@ def setup_cesium(keys):
     sun = spawn(unreal.CesiumSunSky, "CesiumSunSky")
     try:
         sun.set_editor_property("time_zone", 8.0)
-        sun.set_editor_property("solar_time", 19.25)  # dusk
+        sun.set_editor_property("solar_time", 15.0)  # daylight for photoreal tiles
     except Exception as e:
         unreal.log_warning("SunSky time props: {}".format(e))
 
