@@ -201,6 +201,27 @@ void AIslandGridPawn::OnClick(const FInputActionValue&)
 void AIslandGridPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// altitude guard: never let the camera sink into the terrain/roofs —
+	// keep at least ~40m above whatever is directly below
+	{
+		const FVector P = GetActorLocation();
+		FHitResult Ground;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(AltGuard), false, this);
+		if (GetWorld()->LineTraceSingleByChannel(
+				Ground, P + FVector(0, 0, 200000.f), P - FVector(0, 0, 1000000.f),
+				ECC_Visibility, Q))
+		{
+			const float MinZ = Ground.ImpactPoint.Z + 4000.f;
+			if (P.Z < MinZ)
+			{
+				SetActorLocation(FVector(P.X, P.Y,
+					FMath::FInterpTo(P.Z, MinZ, DeltaSeconds, 6.f)),
+					false, nullptr, ETeleportType::TeleportPhysics);
+			}
+		}
+	}
+
 	if (bFlying)
 	{
 		const FVector P = FMath::VInterpTo(GetActorLocation(), FlyTarget, DeltaSeconds, 1.6f);
