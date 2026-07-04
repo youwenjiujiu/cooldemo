@@ -2,6 +2,7 @@
 
 #include "AssetBeacon.h"
 #include "Camera/CameraComponent.h"
+#include "Components/SphereComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/FloatingPawnMovement.h"
@@ -13,7 +14,11 @@ AIslandGridPawn::AIslandGridPawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	// collision sphere so the pawn slides along terrain/buildings instead of
+	// flying through into the dark inside of the globe
+	USphereComponent* Root = CreateDefaultSubobject<USphereComponent>(TEXT("Root"));
+	Root->InitSphereRadius(90.f);
+	Root->SetCollisionProfileName(TEXT("Pawn"));
 	SetRootComponent(Root);
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
@@ -29,21 +34,26 @@ void AIslandGridPawn::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// look down over the island on spawn
-	AddActorLocalRotation(FRotator(0, 0, 0));
+	SpawnLocation = GetActorLocation();
+	// look gently down over the island on spawn (steep pitch + W dives into the ground)
+	SpawnRotation = FRotator(-22.f, GetActorRotation().Yaw, 0.f);
 	if (AController* C = GetController())
 	{
-		C->SetControlRotation(FRotator(-38.f, 0.f, 0.f));
+		C->SetControlRotation(SpawnRotation);
 	}
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->bShowMouseCursor = true;
 		PC->bEnableClickEvents = true;
-		FInputModeGameAndUI Mode;
-		Mode.SetHideCursorDuringCapture(true);
-		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(Mode);
+		// GameOnly: on Mac windowed, GameAndUI routes the keyboard to Slate and WASD dies
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(1, 8.f, FColor::Cyan,
+			TEXT("IslandGrid pawn ready - WASD fly, Q/E down/up, hold RMB look, click a beacon"));
 	}
 }
 
@@ -64,6 +74,8 @@ void AIslandGridPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	IA_Click->ValueType = EInputActionValueType::Boolean;
 	IA_Speed = NewObject<UInputAction>(this);
 	IA_Speed->ValueType = EInputActionValueType::Axis1D;
+	IA_Reset = NewObject<UInputAction>(this);
+	IA_Reset->ValueType = EInputActionValueType::Boolean;
 
 	auto MapKey = [this](UInputAction* Action, FKey Key, bool bNegate = false,
 	                     bool bSwizzle = false)
@@ -92,6 +104,7 @@ void AIslandGridPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	MapKey(IA_LookBtn, EKeys::RightMouseButton);
 	MapKey(IA_Click, EKeys::LeftMouseButton);
 	MapKey(IA_Speed, EKeys::MouseWheelAxis);
+	MapKey(IA_Reset, EKeys::R);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -110,10 +123,29 @@ void AIslandGridPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	EIC->BindAction(IA_LookBtn, ETriggerEvent::Completed, this, &AIslandGridPawn::OnLookStop);
 	EIC->BindAction(IA_Click, ETriggerEvent::Started, this, &AIslandGridPawn::OnClick);
 	EIC->BindAction(IA_Speed, ETriggerEvent::Triggered, this, &AIslandGridPawn::OnSpeed);
+	EIC->BindAction(IA_Reset, ETriggerEvent::Started, this, &AIslandGridPawn::OnReset);
+}
+
+void AIslandGridPawn::OnReset(const FInputActionValue&)
+{
+	bFlying = false;
+	SetActorLocation(SpawnLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	if (AController* C = GetController())
+	{
+		C->SetControlRotation(SpawnRotation);
+	}
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(3, 2.f, FColor::Yellow, TEXT("back to start"));
+	}
 }
 
 void AIslandGridPawn::OnMove(const FInputActionValue& Value)
 {
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(2, 1.f, FColor::Green, TEXT("input OK"));
+	}
 	const FVector2D V = Value.Get<FVector2D>();
 	const FRotator Yaw(0, GetControlRotation().Yaw, 0);
 	AddMovementInput(FRotationMatrix(GetControlRotation()).GetUnitAxis(EAxis::X), V.Y);

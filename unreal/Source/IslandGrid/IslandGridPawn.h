@@ -36,6 +36,7 @@ protected:
 	void OnLookStop(const FInputActionValue& Value);
 	void OnClick(const FInputActionValue& Value);
 	void OnSpeed(const FInputActionValue& Value);
+	void OnReset(const FInputActionValue& Value);
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UCameraComponent> Camera;
@@ -51,6 +52,10 @@ protected:
 	UPROPERTY() TObjectPtr<UInputAction> IA_LookBtn;
 	UPROPERTY() TObjectPtr<UInputAction> IA_Click;
 	UPROPERTY() TObjectPtr<UInputAction> IA_Speed;
+	UPROPERTY() TObjectPtr<UInputAction> IA_Reset;
+
+	FVector SpawnLocation = FVector::ZeroVector;
+	FRotator SpawnRotation = FRotator::ZeroRotator;
 
 	UPROPERTY()
 	TObjectPtr<AAssetBeacon> Focused;
