@@ -31,16 +31,14 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   box-shadow: inset 0 0 220px 40px rgba(0,0,0,.45); }
 
 /* title */
-#title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; text-align: center; z-index: 10; pointer-events: none;
-  opacity: 0; transition: opacity 1.2s ease; }
-#title.in { opacity: 1; }
-#title.out { opacity: 0; filter: blur(6px); transition: opacity 1.2s ease, filter 1.2s ease; }
-#title .eyebrow { font-size: 12px; letter-spacing: .3em; color: var(--muted); text-transform: uppercase; }
-#title h1 { font-size: clamp(44px, 7.5vw, 96px); font-weight: 700; margin: 16px 0 8px;
-  letter-spacing: .12em; color: #fff; text-shadow: 0 0 46px rgba(56,225,214,.5); }
-#title .sub { font-size: clamp(13px, 1.5vw, 18px); color: var(--muted); letter-spacing: .08em; }
-#title .sub b { color: var(--cyan); font-weight: 600; }
+/* persistent page header — this is a product page, not a film */
+#brand { position: absolute; top: 18px; left: 22px; z-index: 15; pointer-events: none;
+  background: rgba(8, 14, 22, .72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(120, 200, 220, .16); border-radius: 10px; padding: 10px 16px; }
+#brand .b1 { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: .14em; }
+#brand .b1 b { color: var(--cyan); }
+#brand .b2 { font-size: 10px; letter-spacing: .22em; color: var(--muted);
+  text-transform: uppercase; margin-top: 3px; }
 
 /* cinematic captions */
 #caption { position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%);
@@ -143,10 +141,9 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 <div id="bloom-changi" class="bloom"></div>
 <div id="bloom-cbd" class="bloom"></div>
 
-<div id="title">
-  <div class="eyebrow">Univers · AIP for Physical Infrastructure</div>
-  <h1>RUN AS ONE</h1>
-  <div class="sub"><b>Energy · Assets · People · Space · Environment</b> — from energy efficiency to a grid-interactive city</div>
+<div id="brand">
+  <div class="b1"><b>univers</b> · AIP for Physical Infrastructure</div>
+  <div class="b2">The built environment, run as one</div>
 </div>
 
 <aside id="panel-data" class="side">
@@ -551,7 +548,7 @@ function pinBloom(el, lngLat) {
 }
 
 /* =============================== UI =============================== */
-const $title = $("#title"), $finale = $("#finale"), $replay = $("#replay");
+const $finale = $("#finale"), $replay = $("#replay");
 const $cap = $("#cap-line"), $loc = $("#loctag");
 $("#clients").innerHTML = SITES.map((s) => `<span>${s.org}</span>`).join("");
 
@@ -573,19 +570,17 @@ function loctag(text) {
 
 /* =============================== PHASES =============================== */
 const PHASES = [
-  { name: "intro", dur: 9000,
+  { name: "intro", dur: 6000,
     enter() {
       map.stop();
       map.jumpTo({ center: [103.8400, 1.3250], zoom: 10.6, pitch: 45, bearing: -15 });
-      map.easeTo({ zoom: 11.05, pitch: 52, bearing: -4, duration: dur(8200), easing: easeInOutCubic });
-      $title.classList.add("in");
+      map.easeTo({ zoom: 11.05, pitch: 52, bearing: -4, duration: dur(5600), easing: easeInOutCubic });
       caption("");
     },
     update(ms) {
-      if (ms > 4200 && !this._c) { this._c = true; caption(CAPS.city); }
-      if (ms > 7600) $title.classList.add("out");
+      if (ms > 1000 && !this._c) { this._c = true; caption(CAPS.city); }
     },
-    exit() { this._c = false; $title.classList.remove("in", "out"); captionOut(); } },
+    exit() { this._c = false; captionOut(); } },
 
   { name: "changi", dur: 17000,
     enter() {
