@@ -235,7 +235,7 @@ const map = new GL.Map({
 function arcCoords(h, a, steps = 56) {
   const dx = a[0] - h[0], dy = a[1] - h[1];
   const d = Math.hypot(dx, dy) || 1e-9;
-  const nx = -dy / d, ny = dx / d, k = 0.18 * d;
+  const nx = -dy / d, ny = dx / d, k = 0.26 * d;
   const c = [(h[0] + a[0]) / 2 + nx * k, (h[1] + a[1]) / 2 + ny * k];
   const pts = [];
   for (let i = 0; i <= steps; i++) {
@@ -305,9 +305,9 @@ function setupLayers() {
       "circle-blur": 0.6, "circle-pitch-alignment": "map" } });
   map.addLayer({ id: "site-core", type: "circle", source: "sites",
     paint: {
-      "circle-radius": ["case", onState, ["case", isHero, 5, 3.5], 0],
-      "circle-color": ["case", isHero, "#38e1d6", "#2fb9b0"],
-      "circle-stroke-color": "#eaffff", "circle-stroke-width": ["case", onState, ["case", isHero, 1, 0.5], 0],
+      "circle-radius": ["case", onState, ["case", isHero, 7.5, 5.5], 0],
+      "circle-color": ["case", isHero, "#45ffef", "#38e1d6"],
+      "circle-stroke-color": "#ffffff", "circle-stroke-width": ["case", onState, ["case", isHero, 2, 1.2], 0],
       "circle-opacity": ["case", onState, 1, 0],
     } });
   map.addLayer({ id: "site-label", type: "symbol", source: "sites",
@@ -323,14 +323,14 @@ function setupLayers() {
     data: { type: "FeatureCollection", features: [] } });
   map.addLayer({ id: "arc-glow", type: "line", source: "arcs",
     layout: { "line-cap": "round" },
-    paint: { "line-color": "#8c9aff", "line-width": 6, "line-blur": 6, "line-opacity": 0.4 } }, "site-pulse");
+    paint: { "line-color": "#5fe0ff", "line-width": 11, "line-blur": 8, "line-opacity": 0.5 } }, "site-pulse");
   map.addLayer({ id: "arc-core", type: "line", source: "arcs",
     layout: { "line-cap": "round" },
-    paint: { "line-width": 2.2,
+    paint: { "line-width": 3.4,
       "line-gradient": ["interpolate", ["linear"], ["line-progress"],
-        0, "#8c9aff", 1, "#38e1d6"] } }, "site-pulse");
+        0, "#b9c6ff", 1, "#4dfff0"] } }, "site-pulse");
   map.addLayer({ id: "arc-flow", type: "line", source: "arcs",
-    paint: { "line-color": "#dffdfb", "line-width": 2.4, "line-opacity": 0,
+    paint: { "line-color": "#ffffff", "line-width": 3.2, "line-opacity": 0,
       "line-dasharray": [0, 4, 3] } }, "site-pulse");
 }
 
@@ -409,9 +409,27 @@ function tickDashFlow(now) {
 let sitesOn = 0;
 const litSites = new Set();
 const setSiteOn = (i, on) => map.setFeatureState({ source: "sites", id: i }, { on });
+let popsEnabled = true; // suppressed on jumps/replays so 35 rings don't fire at once
+function spawnPop(coords, hero) {
+  if (!popsEnabled) return;
+  const p = map.project(coords);
+  const el = document.createElement("div");
+  const size = hero ? 150 : 100;
+  el.style.cssText = `position:absolute;left:${p.x}px;top:${p.y}px;width:${size}px;height:${size}px;
+    margin:-${size/2}px 0 0 -${size/2}px;border-radius:50%;pointer-events:none;z-index:9;
+    border:2.5px solid #7dfff2;box-shadow:0 0 24px #45ffef,inset 0 0 18px rgba(69,255,239,.55);`;
+  document.body.appendChild(el);
+  el.animate([
+    { transform: "scale(.12)", opacity: 1 },
+    { transform: "scale(1)", opacity: 0 },
+  ], { duration: hero ? 950 : 750, easing: "cubic-bezier(.16,1,.3,1)" })
+    .onfinish = () => el.remove();
+}
 const igniteSite = (id) => {
   if (litSites.has(id)) return;
   litSites.add(id); setSiteOn(id, true); sitesOn = litSites.size;
+  const s = ALL_SITES[id];
+  if (s) spawnPop(s.coords, s.tier === "hero");
 };
 const allSitesOn = () => ALL_SITES.forEach((s) => igniteSite(s.id));
 const allSitesOff = () => {
@@ -614,6 +632,7 @@ function resetWorld() {
 }
 function jumpTo(idx) {
   idx = clamp(idx, 0, PHASES.length - 1);
+  popsEnabled = false; // no shockwave spam when rebuilding pre-state
   if (cur >= 0) PHASES[cur].exit();
   resetWorld();
   // world state each phase expects on entry (for skips/replay)
@@ -625,6 +644,7 @@ function jumpTo(idx) {
   playT = PHASES[idx].start;
   cur = idx;
   PHASES[idx].enter();
+  popsEnabled = true;
 }
 $replay.onclick = () => jumpTo(0);
 $("#skip").onclick = () => jumpTo(cur + 1);
@@ -644,8 +664,8 @@ function frame(now) {
   if (map.getLayer("site-pulse") && sitesOn > 0) {
     const phse = (now % 1400) / 1400;
     const on = ["boolean", ["feature-state", "on"], false];
-    map.setPaintProperty("site-pulse", "circle-radius", ["case", on, 6 + phse * 16, 0]);
-    map.setPaintProperty("site-pulse", "circle-opacity", ["case", on, 0.55 * (1 - phse), 0]);
+    map.setPaintProperty("site-pulse", "circle-radius", ["case", on, 9 + phse * 26, 0]);
+    map.setPaintProperty("site-pulse", "circle-opacity", ["case", on, 0.75 * (1 - phse), 0]);
   }
   window.__dbg = { playT: Math.round(playT), cur, phase: ph.name, dt: Math.round(dt) };
 }
