@@ -143,6 +143,11 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   animation: coin-spin 2.8s cubic-bezier(.5, 0, .3, 1) infinite; }
 @keyframes coin-spin { 0% { transform: rotateY(0); } 55%, 100% { transform: rotateY(360deg); } }
 
+/* trust line at the foot of the OUTCOME panel — why the client should believe */
+#panel-outcome .s-proof { margin-top: 12px; padding-top: 9px; font-size: 10.5px;
+  line-height: 1.55; color: #ffd9a0; letter-spacing: .03em; font-style: italic;
+  border-top: 1px dashed rgba(255, 184, 77, .3); }
+
 /* DATA panel ontology graph — domains as nodes wired into one hub */
 #onto { display: block; width: 100%; margin: 2px 0 8px; }
 #onto .edge { stroke: rgba(140, 210, 220, .13); stroke-width: 1; fill: none; }
@@ -272,6 +277,7 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   <div class="s-head"><b>OUTCOME</b> · what we deliver</div>
   <div class="s-mod"></div>
   <ul></ul>
+  <div class="s-proof"></div>
 </aside>
 
 <div id="loctag"></div>
@@ -355,7 +361,10 @@ const PANELS = {
       People: "occupancy & footfall, floor by floor",
       Environment: "weather & wet-bulb forecast",
     },
-    outcome: { "Energy bill 8–15% ↓": "cooling retuned in real time" },
+    outcome: {
+      "Energy bill 8–15% ↓": "AI retunes the plant every hour — savings audited, not estimated",
+    },
+    proof: "Guaranteed in the contract — M&V-audited (IPMVP). If it doesn't save, we don't get paid.",
   },
   em: {
     mod: "EM · Energy Monitoring",
@@ -365,9 +374,10 @@ const PANELS = {
       Space: "tenant & floor submetering",
     },
     outcome: {
-      "Energy bill 8–15% ↓": "savings measured & verified",
-      "OPEX leaner ↓": "waste & anomalies surfaced",
+      "Energy bill 8–15% ↓": "verified against every sub-meter, tenant by tenant",
+      "OPEX leaner ↓": "waste surfaces in hours — not in next year's audit",
     },
+    proof: "Proven across airports, banks, ports and public estates. Waste has nowhere to hide.",
   },
   ioc: {
     mod: "IoC · Integration of Control",
@@ -377,10 +387,11 @@ const PANELS = {
       People: "comfort held while control shifts",
     },
     outcome: {
-      "OPEX leaner ↓": "reactive → predictive maintenance",
-      "Capex deferred ↓": "equipment runs longer, replaced later",
-      "Space & NOI higher ↑": "uptime, comfort, resilience",
+      "Capex deferred ↓": "assets run gentler, live longer — replacement pushed out",
+      "OPEX leaner ↓": "FDD turns breakdowns into scheduled fixes",
+      "Space & NOI higher ↑": "comfort held, uptime proven — tenants stay and pay",
     },
+    proof: "Faults fixed before tenants feel them. That is control — not another dashboard.",
   },
 };
 // knowledge-graph view of the DATA side: the five domains are nodes wired into
@@ -432,6 +443,7 @@ function showPanels(key) {
     return `<li class="${sub ? "" : "dim"}" style="transition-delay:${200 + i * 110}ms">
       <div><div class="t">${t}</div>${sub ? `<small>${sub}</small>` : ""}</div></li>`;
   }).join("");
+  oEl.querySelector(".s-proof").innerHTML = p.proof ? `◆ ${p.proof}` : "";
   [dEl, oEl].forEach((el) => {
     el.classList.remove("in");
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("in")));
@@ -504,6 +516,32 @@ const MESH_EDGES = (() => {
 })();
 const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(ALL_SITES[a].coords, ALL_SITES[b].coords));
 
+// the control fabric flies HIGH above the skyline: each edge becomes a chain
+// of glowing extruded beam segments rising along a parabola, apex well above
+// the stylized towers, with the flat line kept only as a faint ground trace
+const ARC_BASE_COLOR = ["interpolate", ["linear"], ["get", "t"],
+  0, "#b9c6ff", 0.5, "#7df2ff", 1, "#4dfff0"];
+const ARC3D = ARCS.map((pts, i) => {
+  const len = Math.hypot(pts[pts.length - 1][0] - pts[0][0],
+    pts[pts.length - 1][1] - pts[0][1]) * 110574; // metres, roughly
+  const apex = clamp(len * 0.32, 1600, 4400);
+  const W = 120 / 110574 / 2; // beam half-width ~60 m
+  const segs = [];
+  for (let j = 0; j + 2 < pts.length; j += 2) {
+    const p0 = pts[j], p1 = pts[j + 2];
+    const t = (j + 1) / (pts.length - 1);
+    const z = apex * 4 * t * (1 - t); // parabolic flight path
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], d = Math.hypot(dx, dy) || 1e-9;
+    const nx = -dy / d * W, ny = dx / d * W;
+    segs.push({ type: "Feature", properties: { edge: i, t, b: z, h: z + 150 },
+      geometry: { type: "Polygon", coordinates: [[
+        [p0[0] + nx, p0[1] + ny], [p1[0] + nx, p1[1] + ny],
+        [p1[0] - nx, p1[1] - ny], [p0[0] - nx, p0[1] - ny],
+        [p0[0] + nx, p0[1] + ny]]] } });
+  }
+  return segs;
+});
+
 // synthetic skyline for the island view: real building tiles only exist from
 // z13 up, so when the camera pulls out each asset lights a small cluster of
 // stylized glowing towers instead of a bare dot (the layer is capped at z13.2,
@@ -519,23 +557,34 @@ const SYN = (() => {
     const hero = s.tier === "hero";
     const k = CROWDED.has(s.key) ? 1 : hero ? 3 : 2;
     for (let n = 0; n < k; n++) {
-      // island-view scale: at z≈11 one pixel is ~38 m, so the towers are
+      // island-view scale: at z≈11 one pixel is ~50 m, so the towers are
       // deliberately exaggerated or they'd vanish into the basemap; the first
       // tower sits exactly on the site so the label can ride its roof
-      const ox = n === 0 ? 0 : (rnd(s.id, n * 3) - 0.5) * 900 / 110574;
-      const oy = n === 0 ? 0 : (rnd(s.id, n * 3 + 1) - 0.5) * 900 / 110574;
-      const half = (130 + rnd(s.id, n * 3 + 2) * 110) / 110574;
-      const h = (hero ? 950 : 550) + rnd(s.id, n * 7 + 3) * (hero ? 750 : 450);
+      const ox = n === 0 ? 0 : (rnd(s.id, n * 3) - 0.5) * 1100 / 110574;
+      const oy = n === 0 ? 0 : (rnd(s.id, n * 3 + 1) - 0.5) * 1100 / 110574;
+      const half = (170 + rnd(s.id, n * 3 + 2) * 130) / 110574;
+      const h = (hero ? 1250 : 720) + rnd(s.id, n * 7 + 3) * (hero ? 950 : 580);
       const cx = s.coords[0] + ox, cy = s.coords[1] + oy;
       // each tower gets its own bearing — a grid of identical axis-aligned
       // boxes reads as pasted-on
       const a = rnd(s.id, n * 5 + 9) * Math.PI / 2;
-      const rot = (dx, dy) => [cx + dx * Math.cos(a) - dy * Math.sin(a),
-        cy + dx * Math.sin(a) + dy * Math.cos(a)];
-      const ring = [rot(-half, -half), rot(half, -half), rot(half, half),
-        rot(-half, half), rot(-half, -half)];
-      feats.push({ type: "Feature", properties: { site: s.id, h, tone: "cyan" },
-        geometry: { type: "Polygon", coordinates: [ring] } });
+      const box = (halfX, halfY, b, top, kind) => {
+        const rot = (dx, dy) => [cx + dx * Math.cos(a) - dy * Math.sin(a),
+          cy + dx * Math.sin(a) + dy * Math.cos(a)];
+        feats.push({ type: "Feature",
+          properties: { site: s.id, h: top, b, kind, tone: "cyan" },
+          geometry: { type: "Polygon", coordinates: [[
+            rot(-halfX, -halfY), rot(halfX, -halfY), rot(halfX, halfY),
+            rot(-halfX, halfY), rot(-halfX, -halfY)]] } });
+      };
+      // setback silhouette: podium → tower → crown, then a glowing cap and
+      // (sometimes) a needle spire — reads as a skyscraper, not a slab
+      box(half, half, 0, h * 0.42, "body");
+      box(half * 0.74, half * 0.74, h * 0.40, h * 0.78, "body");
+      box(half * 0.52, half * 0.52, h * 0.76, h, "body");
+      box(half * 0.56, half * 0.56, h, h + 55, "cap");
+      if (rnd(s.id, n * 11 + 4) > 0.45)
+        box(half * 0.1, half * 0.1, h, h + 340 + rnd(s.id, n * 13 + 6) * 200, "cap");
     }
   });
   return feats;
@@ -645,16 +694,33 @@ function setupLayers() {
   const synLayer = {
     id: "syn-bld-3d", type: "fill-extrusion", source: "syn-bld", maxzoom: 13.2,
     paint: {
-      "fill-extrusion-color": ["match", ["get", "tone"],
-        "amber", "#f0a832", "#49ffef"],
+      // caps and spires burn hotter than the body — a night-skyline read
+      "fill-extrusion-color": ["case", ["==", ["get", "kind"], "cap"],
+        ["match", ["get", "tone"], "amber", "#ffdca0", "#defffb"],
+        ["match", ["get", "tone"], "amber", "#f0a832", "#40f4e4"]],
       "fill-extrusion-height": ["get", "h"],
-      "fill-extrusion-base": 0,
+      "fill-extrusion-base": ["get", "b"],
       "fill-extrusion-opacity": 1,
       "fill-extrusion-vertical-gradient": false,
     },
   };
-  if (USE_MAPBOX) synLayer.paint["fill-extrusion-emissive-strength"] = 1.1;
+  // NOTE: emissive-strength is NOT data-driven — an expression here fails
+  // style validation and Mapbox silently drops the whole layer; brightness
+  // differences live in the color instead
+  if (USE_MAPBOX) synLayer.paint["fill-extrusion-emissive-strength"] = 1.15;
   map.addLayer(synLayer, firstSymbol);
+  // light spills onto the ground around glowing structures (GL v3; each prop
+  // applied separately so an unsupported engine degrades gracefully)
+  const floodLight = (layer, color, ground) => {
+    if (!USE_MAPBOX) return;
+    [["fill-extrusion-flood-light-color", color],
+     ["fill-extrusion-flood-light-intensity", 0.55],
+     ["fill-extrusion-flood-light-ground-radius", ground],
+     ["fill-extrusion-flood-light-wall-radius", ground * 0.4],
+    ].forEach(([k, v]) => { try { map.setPaintProperty(layer, k, v); } catch (e) {} });
+  };
+  floodLight("syn-bld-3d", "#2ee8d8", 900);
+  floodLight("lit-bld-3d", "#2ee8d8", 40);
 
   map.addSource("sites", { type: "geojson", data: {
     type: "FeatureCollection",
@@ -699,19 +765,25 @@ function setupLayers() {
 
   map.addSource("arcs", { type: "geojson", lineMetrics: true,
     data: { type: "FeatureCollection", features: [] } });
+  // faint ground trace under the aerial fabric — reads as its reflection
   map.addLayer({ id: "arc-glow", type: "line", source: "arcs",
     layout: { "line-cap": "round" },
-    paint: { "line-color": "#5fe0ff", "line-width": 20, "line-blur": 14, "line-opacity": 0.65 } }, "site-pulse");
-  map.addLayer({ id: "arc-core", type: "line", source: "arcs",
-    layout: { "line-cap": "round" },
-    paint: { "line-width": 4.4,
-      "line-gradient": ["interpolate", ["linear"], ["line-progress"],
-        0, "#b9c6ff", 1, "#4dfff0"] } }, "site-pulse");
-  // white-hot energy pulses racing along every arc (gradient window animated
-  // per frame over line-progress)
-  map.addLayer({ id: "arc-comet", type: "line", source: "arcs",
-    layout: { "line-cap": "round" },
-    paint: { "line-width": 7, "line-opacity": 0, "line-blur": 0.5 } }, "site-pulse");
+    paint: { "line-color": "#3fd8de", "line-width": 9, "line-blur": 9, "line-opacity": 0.28 } }, "site-pulse");
+  // the fabric itself: elevated glowing beam segments, animated by tickComet
+  map.addSource("arc3d", { type: "geojson",
+    data: { type: "FeatureCollection", features: [] } });
+  const arc3dLayer = {
+    id: "arc-3d", type: "fill-extrusion", source: "arc3d",
+    paint: {
+      "fill-extrusion-color": ARC_BASE_COLOR,
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": ["get", "b"],
+      "fill-extrusion-opacity": 1,
+      "fill-extrusion-vertical-gradient": false,
+    },
+  };
+  if (USE_MAPBOX) arc3dLayer.paint["fill-extrusion-emissive-strength"] = 1.25;
+  map.addLayer(arc3dLayer, firstSymbol);
 }
 
 function retoneTag(tag, tone) { // e.g. FDD fault (amber) → resolved (cyan)
@@ -805,22 +877,9 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "
       if (inBoxes([cx / ring.length, cy / ring.length])) return true;
       return ring.some(inBoxes);
     };
-    const besideLit = (ring) => ring.some(([x, y]) => {
-      const cx = Math.round(x / CELL), cy = Math.round(y / CELL);
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
-        if (grid.has(`${cx + dx},${cy + dy}`)) return true;
-      return false;
-    });
-    // one sideways pass (podium next to seed), then cascade upwards only —
-    // overlap/building-id based, so inset crowns and sibling parts chain
-    // through their complex without flooding the whole downtown via
-    // street-to-street adjacency
-    cands.forEach((c, i) => {
-      if (!kept[i] && (overlapsLit(c.poly[0]) || besideLit(c.poly[0]))) {
-        kept[i] = true; addKept(c.poly);
-        if (c.bid != null) bids.add(c.bid);
-      }
-    });
+    // adoption is overlap/building-id ONLY — same-complex parts (crowns,
+    // stacked slices, towers on their own podium) chain in, but street
+    // neighbours do NOT: a shophouse district must not flood into one blob
     for (let pass = 0, changed = true; changed && pass < 4; pass++) {
       changed = false;
       cands.forEach((c, i) => {
@@ -909,27 +968,29 @@ function clearXray() {
 /* --- arcs progressive reveal + flowing dash --- */
 let arcProgress = ARCS.map(() => 0);
 function setArcData() {
-  const features = [];
+  const features = [], beams = [];
   ARCS.forEach((coords, i) => {
     const p = arcProgress[i];
     if (p <= 0) return;
     const n = Math.max(2, Math.round(p * coords.length));
     features.push({ type: "Feature", properties: {},
       geometry: { type: "LineString", coordinates: coords.slice(0, n) } });
+    ARC3D[i].forEach((seg) => { if (seg.properties.t <= p) beams.push(seg); });
   });
   map.getSource("arcs")?.setData({ type: "FeatureCollection", features });
+  map.getSource("arc3d")?.setData({ type: "FeatureCollection", features: beams });
 }
-// white-hot pulses racing along every arc: a narrow gradient window sweeps
-// line-progress from end to end each cycle
+// white-hot pulses racing along every aerial beam: two hot windows sweep the
+// per-segment t coordinate each cycle
+function cometColor(phase) {
+  const win = (p) => ["<", ["abs", ["-", ["get", "t"], p]], 0.055];
+  return ["case",
+    ["any", win(phase), win((phase + 0.5) % 1)], "#ffffff",
+    ARC_BASE_COLOR];
+}
 function tickComet(now) {
-  const t = ((now % 1600) / 1600) * 1.24 - 0.12; // overshoot so pulses clear both ends
-  const st = (v) => clamp(v, 0.0001, 0.9996);
-  let s0 = st(t - 0.11), s1 = st(t - 0.035), s2 = st(t), s3 = st(t + 0.02);
-  s1 = Math.max(s1, s0 + 1e-4); s2 = Math.max(s2, s1 + 1e-4); s3 = Math.max(s3, s2 + 1e-4);
-  map.setPaintProperty("arc-comet", "line-gradient",
-    ["interpolate", ["linear"], ["line-progress"],
-      s0, "rgba(120,255,244,0)", s1, "rgba(170,255,249,.9)",
-      s2, "#ffffff", s3, "rgba(120,255,244,0)"]);
+  map.setPaintProperty("arc-3d", "fill-extrusion-color",
+    cometColor((now % 1700) / 1700));
 }
 // island-scale shockwave: three concentric rings blast out of the CBD as the
 // ignition wave departs
@@ -1083,10 +1144,10 @@ const PHASES = [
       if (ms > 4100 && !this._lit) { // after the pull-back has settled
         this._lit = true;
         const script = () => {
-          lightBuildingsAt(DBS_TOWER, "amber", 60, 120); // the origin block stays amber
+          lightBuildingsAt(DBS_TOWER, "amber", 55, 100); // the origin block stays amber
           for (const k of ["ocbc", "ngs", "frasers", "with"]) {
             const s = SITES.find((x) => x.key === k);
-            lightBuildingsAt(s.coords, "cyan", 90, 140); // neighbours ignite together
+            lightBuildingsAt(s.coords, "cyan", 60, 85); // each client tower, distinctly
           }
         };
         script();
@@ -1120,13 +1181,12 @@ const PHASES = [
     enter() {
       map.stop();
       unlightBuildings();
-      map.flyTo({ center: [103.8520, 1.3180], zoom: 11.35, pitch: 50, bearing: -8,
+      map.flyTo({ center: [103.8520, 1.3180], zoom: 10.9, pitch: 54, bearing: -8,
         duration: dur(4200), curve: 1.35, easing: easeInOutCubic });
       caption("");
       this._c1 = false; this._orbit = false; this._wave = false;
       this._fault = this._fixed = false;
       arcProgress = ARCS.map(() => 0);
-      map.setPaintProperty("arc-comet", "line-opacity", 0);
       this._flow = false;
     },
     update(ms, now) {
@@ -1158,7 +1218,6 @@ const PHASES = [
       if (changed) setArcData();
       if (!this._flow && arcProgress.every((p) => p >= 1)) {
         this._flow = true;
-        map.setPaintProperty("arc-comet", "line-opacity", 1);
       }
       if (this._flow) tickComet(now);
     },
@@ -1166,14 +1225,13 @@ const PHASES = [
       allSitesOn();
       setFault(FDD_SITE.id, false);
       arcProgress = ARCS.map(() => 1); setArcData();
-      map.setPaintProperty("arc-comet", "line-opacity", 1);
       captionOut(); loctag(""); hidePanels();
     } },
 
   { name: "finale", dur: Infinity,
     enter() {
       map.stop();
-      map.easeTo({ center: [103.8520, 1.3180], zoom: 11.2, pitch: 52, bearing: 40,
+      map.easeTo({ center: [103.8520, 1.3180], zoom: 10.9, pitch: 54, bearing: 40,
         duration: dur(26000), easing: (t) => t });
       // clean ending: no text overlay, just the living map and a Replay control
       this._timers = [setTimeout(() => $replay.classList.add("in"), 2400)];
@@ -1203,7 +1261,7 @@ function resetWorld() {
   clearXray();
   allSitesOff();
   arcProgress = ARCS.map(() => 0); setArcData();
-  if (map.getLayer("arc-comet")) map.setPaintProperty("arc-comet", "line-opacity", 0);
+  if (map.getLayer("arc-3d")) map.setPaintProperty("arc-3d", "fill-extrusion-color", ARC_BASE_COLOR);
   ["#bloom-changi", "#bloom-cbd"].forEach((s) => $(s).classList.remove("on"));
   setFault(FDD_SITE.id, false);
   captionOut(); loctag(""); hidePanels();
@@ -1217,8 +1275,7 @@ function jumpTo(idx) {
   if (idx >= 2) igniteSite(1); // the DBS origin tower
   if (idx >= 3) ["dbs","ocbc","ngs","frasers","with"].forEach((k) =>
     igniteSite(SITES.find((s) => s.key === k).id));
-  if (idx >= 4) { allSitesOn(); arcProgress = ARCS.map(() => 1); setArcData();
-    map.setPaintProperty("arc-comet", "line-opacity", 1); }
+  if (idx >= 4) { allSitesOn(); arcProgress = ARCS.map(() => 1); setArcData(); }
   playT = PHASES[idx].start;
   cur = idx;
   PHASES[idx].enter();
@@ -1262,7 +1319,7 @@ function wireExplore() {
     map.flyTo({ center: s.coords, zoom: 15.4, pitch: 60, bearing: -20,
       duration: 2600, curve: 1.4, easing: easeInOutCubic });
     map.once("moveend", () => {
-      if (exploring) lightBuildingsAt(s.coords, "cyan", 90, 140);
+      if (exploring) lightBuildingsAt(s.coords, "cyan", 70, 100);
     });
   };
   ["site-core", "site-label", "syn-bld-3d"].forEach((layer) => {
