@@ -516,32 +516,6 @@ const MESH_EDGES = (() => {
 })();
 const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(ALL_SITES[a].coords, ALL_SITES[b].coords));
 
-// the control fabric flies HIGH above the skyline: each edge becomes a chain
-// of glowing extruded beam segments rising along a parabola, apex well above
-// the stylized towers, with the flat line kept only as a faint ground trace
-const ARC_BASE_COLOR = ["interpolate", ["linear"], ["get", "t"],
-  0, "#b9c6ff", 0.5, "#7df2ff", 1, "#4dfff0"];
-const ARC3D = ARCS.map((pts, i) => {
-  const len = Math.hypot(pts[pts.length - 1][0] - pts[0][0],
-    pts[pts.length - 1][1] - pts[0][1]) * 110574; // metres, roughly
-  const apex = clamp(len * 0.32, 1600, 4400);
-  const W = 120 / 110574 / 2; // beam half-width ~60 m
-  const segs = [];
-  for (let j = 0; j + 2 < pts.length; j += 2) {
-    const p0 = pts[j], p1 = pts[j + 2];
-    const t = (j + 1) / (pts.length - 1);
-    const z = apex * 4 * t * (1 - t); // parabolic flight path
-    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], d = Math.hypot(dx, dy) || 1e-9;
-    const nx = -dy / d * W, ny = dx / d * W;
-    segs.push({ type: "Feature", properties: { edge: i, t, b: z, h: z + 150 },
-      geometry: { type: "Polygon", coordinates: [[
-        [p0[0] + nx, p0[1] + ny], [p1[0] + nx, p1[1] + ny],
-        [p1[0] - nx, p1[1] - ny], [p0[0] - nx, p0[1] - ny],
-        [p0[0] + nx, p0[1] + ny]]] } });
-  }
-  return segs;
-});
-
 // synthetic skyline for the island view: real building tiles only exist from
 // z13 up, so when the camera pulls out each asset lights a small cluster of
 // stylized glowing towers instead of a bare dot (the layer is capped at z13.2,
@@ -765,25 +739,19 @@ function setupLayers() {
 
   map.addSource("arcs", { type: "geojson", lineMetrics: true,
     data: { type: "FeatureCollection", features: [] } });
-  // faint ground trace under the aerial fabric — reads as its reflection
   map.addLayer({ id: "arc-glow", type: "line", source: "arcs",
     layout: { "line-cap": "round" },
-    paint: { "line-color": "#3fd8de", "line-width": 9, "line-blur": 9, "line-opacity": 0.28 } }, "site-pulse");
-  // the fabric itself: elevated glowing beam segments, animated by tickComet
-  map.addSource("arc3d", { type: "geojson",
-    data: { type: "FeatureCollection", features: [] } });
-  const arc3dLayer = {
-    id: "arc-3d", type: "fill-extrusion", source: "arc3d",
-    paint: {
-      "fill-extrusion-color": ARC_BASE_COLOR,
-      "fill-extrusion-height": ["get", "h"],
-      "fill-extrusion-base": ["get", "b"],
-      "fill-extrusion-opacity": 1,
-      "fill-extrusion-vertical-gradient": false,
-    },
-  };
-  if (USE_MAPBOX) arc3dLayer.paint["fill-extrusion-emissive-strength"] = 1.25;
-  map.addLayer(arc3dLayer, firstSymbol);
+    paint: { "line-color": "#5fe0ff", "line-width": 20, "line-blur": 14, "line-opacity": 0.65 } }, "site-pulse");
+  map.addLayer({ id: "arc-core", type: "line", source: "arcs",
+    layout: { "line-cap": "round" },
+    paint: { "line-width": 4.4,
+      "line-gradient": ["interpolate", ["linear"], ["line-progress"],
+        0, "#b9c6ff", 1, "#4dfff0"] } }, "site-pulse");
+  // white-hot energy pulses racing along every arc (gradient window animated
+  // per frame over line-progress)
+  map.addLayer({ id: "arc-comet", type: "line", source: "arcs",
+    layout: { "line-cap": "round" },
+    paint: { "line-width": 7, "line-opacity": 0, "line-blur": 0.5 } }, "site-pulse");
 }
 
 function retoneTag(tag, tone) { // e.g. FDD fault (amber) → resolved (cyan)
@@ -968,29 +936,27 @@ function clearXray() {
 /* --- arcs progressive reveal + flowing dash --- */
 let arcProgress = ARCS.map(() => 0);
 function setArcData() {
-  const features = [], beams = [];
+  const features = [];
   ARCS.forEach((coords, i) => {
     const p = arcProgress[i];
     if (p <= 0) return;
     const n = Math.max(2, Math.round(p * coords.length));
     features.push({ type: "Feature", properties: {},
       geometry: { type: "LineString", coordinates: coords.slice(0, n) } });
-    ARC3D[i].forEach((seg) => { if (seg.properties.t <= p) beams.push(seg); });
   });
   map.getSource("arcs")?.setData({ type: "FeatureCollection", features });
-  map.getSource("arc3d")?.setData({ type: "FeatureCollection", features: beams });
 }
-// white-hot pulses racing along every aerial beam: two hot windows sweep the
-// per-segment t coordinate each cycle
-function cometColor(phase) {
-  const win = (p) => ["<", ["abs", ["-", ["get", "t"], p]], 0.055];
-  return ["case",
-    ["any", win(phase), win((phase + 0.5) % 1)], "#ffffff",
-    ARC_BASE_COLOR];
-}
+// white-hot pulses racing along every arc: a narrow gradient window sweeps
+// line-progress from end to end each cycle
 function tickComet(now) {
-  map.setPaintProperty("arc-3d", "fill-extrusion-color",
-    cometColor((now % 1700) / 1700));
+  const t = ((now % 1600) / 1600) * 1.24 - 0.12; // overshoot so pulses clear both ends
+  const st = (v) => clamp(v, 0.0001, 0.9996);
+  let s0 = st(t - 0.11), s1 = st(t - 0.035), s2 = st(t), s3 = st(t + 0.02);
+  s1 = Math.max(s1, s0 + 1e-4); s2 = Math.max(s2, s1 + 1e-4); s3 = Math.max(s3, s2 + 1e-4);
+  map.setPaintProperty("arc-comet", "line-gradient",
+    ["interpolate", ["linear"], ["line-progress"],
+      s0, "rgba(120,255,244,0)", s1, "rgba(170,255,249,.9)",
+      s2, "#ffffff", s3, "rgba(120,255,244,0)"]);
 }
 // island-scale shockwave: three concentric rings blast out of the CBD as the
 // ignition wave departs
@@ -1187,6 +1153,7 @@ const PHASES = [
       this._c1 = false; this._orbit = false; this._wave = false;
       this._fault = this._fixed = false;
       arcProgress = ARCS.map(() => 0);
+      map.setPaintProperty("arc-comet", "line-opacity", 0);
       this._flow = false;
     },
     update(ms, now) {
@@ -1218,6 +1185,7 @@ const PHASES = [
       if (changed) setArcData();
       if (!this._flow && arcProgress.every((p) => p >= 1)) {
         this._flow = true;
+        map.setPaintProperty("arc-comet", "line-opacity", 1);
       }
       if (this._flow) tickComet(now);
     },
@@ -1225,6 +1193,7 @@ const PHASES = [
       allSitesOn();
       setFault(FDD_SITE.id, false);
       arcProgress = ARCS.map(() => 1); setArcData();
+      map.setPaintProperty("arc-comet", "line-opacity", 1);
       captionOut(); loctag(""); hidePanels();
     } },
 
@@ -1261,7 +1230,7 @@ function resetWorld() {
   clearXray();
   allSitesOff();
   arcProgress = ARCS.map(() => 0); setArcData();
-  if (map.getLayer("arc-3d")) map.setPaintProperty("arc-3d", "fill-extrusion-color", ARC_BASE_COLOR);
+  if (map.getLayer("arc-comet")) map.setPaintProperty("arc-comet", "line-opacity", 0);
   ["#bloom-changi", "#bloom-cbd"].forEach((s) => $(s).classList.remove("on"));
   setFault(FDD_SITE.id, false);
   captionOut(); loctag(""); hidePanels();
@@ -1275,7 +1244,8 @@ function jumpTo(idx) {
   if (idx >= 2) igniteSite(1); // the DBS origin tower
   if (idx >= 3) ["dbs","ocbc","ngs","frasers","with"].forEach((k) =>
     igniteSite(SITES.find((s) => s.key === k).id));
-  if (idx >= 4) { allSitesOn(); arcProgress = ARCS.map(() => 1); setArcData(); }
+  if (idx >= 4) { allSitesOn(); arcProgress = ARCS.map(() => 1); setArcData();
+    map.setPaintProperty("arc-comet", "line-opacity", 1); }
   playT = PHASES[idx].start;
   cur = idx;
   PHASES[idx].enter();
