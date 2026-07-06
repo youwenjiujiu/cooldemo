@@ -193,8 +193,19 @@ tiles.registerPlugin(new CesiumIonAuthPlugin({
 tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
 tiles.setCamera(camera);
 tiles.setResolutionFromRenderer(camera, renderer);
-tiles.errorTarget = 8;
+tiles.errorTarget = 3;          // stream sharper LODs sooner
 scene.add(tiles.group);
+
+// crisp oblique textures: max anisotropic filtering on every streamed tile
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+tiles.addEventListener("load-model", ({ scene: tileScene }) => {
+  tileScene.traverse((o) => {
+    if (o.material && o.material.map) {
+      o.material.map.anisotropy = MAX_ANISO;
+      o.material.map.needsUpdate = true;
+    }
+  });
+});
 
 // re-orient the globe: Singapore origin at (0,0,0), Y up, north = -Z
 {
@@ -399,9 +410,42 @@ function focusBeacon(b) {
 }
 function resetView() {
   flyTarget = null; focus = null; hideAssetCard();
-  camera.position.set(3500, 2600, 11000);
-  yaw = Math.PI + 0.25; pitch = -0.28;
-  syncCameraRotation();
+  camera.position.set(4200, 2600, 11500);   // over the sea south of Marina Bay
+  camera.lookAt(2600, 0, 4200);              // facing the CBD / island
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+  yaw = e.y; pitch = e.x;
+}
+
+/* screen-space label decluttering: overlapping names hide, nearest/hero wins;
+   zooming in separates them and they fade back */
+let lastDeclutter = 0;
+const declutterV = new THREE.Vector3();
+function declutterLabels(now) {
+  if (now - lastDeclutter < 150) return;
+  lastDeclutter = now;
+  const fovScale = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  const items = [];
+  for (const b of beacons) {
+    if (!b.lit) { continue; }
+    declutterV.copy(b.group.position).setY(b.group.position.y + b.label.position.y);
+    const dist = declutterV.distanceTo(camera.position);
+    const p = declutterV.clone().project(camera);
+    if (p.z > 1) { b.labelHidden = true; continue; }
+    const sx = (p.x * 0.5 + 0.5) * innerWidth;
+    const sy = (-p.y * 0.5 + 0.5) * innerHeight;
+    const h = (b.label.scale.y / dist) * fovScale;
+    const w = (b.label.scale.x / dist) * fovScale;
+    items.push({ b, sx, sy, w, h, dist, hero: b.site.tier === "hero" });
+  }
+  items.sort((a, c) => (a.hero !== c.hero) ? (a.hero ? -1 : 1) : a.dist - c.dist);
+  const kept = [];
+  for (const it of items) {
+    const clash = kept.some((k) =>
+      Math.abs(k.sx - it.sx) < (k.w + it.w) * 0.5 &&
+      Math.abs(k.sy - it.sy) < (k.h + it.h) * 0.62);
+    it.b.labelHidden = clash;
+    if (!clash) kept.push(it);
+  }
 }
 
 /* altitude guard */
@@ -451,7 +495,7 @@ const INTRO = [
     } },
   { t: 24000, dur: 8000,
     from: { p: [CBD_P.x - 900, 1500, CBD_P.z + 2600], l: [CBD_P.x, 150, CBD_P.z] },
-    to:   { p: [1500, 15000, 22000], l: [2000, 0, 1000] },
+    to:   { p: [2500, 7800, 14500], l: [2500, 0, 1500] },
     enter() {
       chapter('Chapter · <b>Intelligent Operations · FDD</b>');
       let i = 0;
@@ -616,13 +660,16 @@ function frame() {
     altitudeGuard(now);
   }
 
-  // beacon pulse
+  // beacon pulse + label fade (declutter-aware)
+  declutterLabels(now);
   for (const b of beacons) {
     if (!b.lit) continue;
     b.pulse += dt * (b === focus ? 6 : 2.1);
     const s = 0.72 + 0.28 * Math.sin(b.pulse);
     b.core.material.opacity = 0.55 + 0.4 * s;
     b.shell.material.opacity = 0.10 + 0.13 * s;
+    const want = b.labelHidden ? 0 : 0.95;
+    b.label.material.opacity += (want - b.label.material.opacity) * Math.min(1, dt * 8);
   }
 
   if (assetCard && assetCardAnchor) pinCard(assetCard, assetCardAnchor);
