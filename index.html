@@ -671,26 +671,64 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "
       const pr = f.properties || {};
       const b0 = pr.render_min_height ?? pr.min_height ?? 0;
       const h0 = pr.render_height ?? pr.height ?? 8;
-      polys.forEach((poly) => cands.push({ poly, b0, h0 }));
+      const bid = pr.building_id; // OSM parts of one building share this
+      polys.forEach((poly) => cands.push({ poly, b0, h0, bid }));
     });
     // pass 1: seed with footprints near the site point
     const kept = cands.map((c) => near(c.poly[0]));
+    const bids = new Set();
+    cands.forEach((c, i) => { if (kept[i] && c.bid != null) bids.add(c.bid); });
     // pass 2: adopt slices standing on or against anything already lit — a
-    // complex is podium + towers in separate features, and a tower whose
-    // podium made the seed radius must not stay dark above a glowing base
+    // complex is podium + towers + crowns in separate features, and no part
+    // of it may stay dark above a glowing base
     const CELL = 30 / 110574; // ~30 m adjacency
     const cellKey = (x, y) => `${Math.round(x / CELL)},${Math.round(y / CELL)}`;
     const grid = new Set();
-    cands.forEach((c, i) => {
-      if (kept[i]) c.poly[0].forEach(([x, y]) => grid.add(cellKey(x, y)));
-    });
-    const touchesLit = (ring) => ring.some(([x, y]) => {
+    const boxes = []; // bounding boxes of everything lit, padded ~5 m
+    const PADB = 5 / 110574;
+    const addKept = (poly) => {
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      poly[0].forEach(([x, y]) => {
+        grid.add(cellKey(x, y));
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      });
+      boxes.push([x0 - PADB, y0 - PADB, x1 + PADB, y1 + PADB]);
+    };
+    cands.forEach((c, i) => { if (kept[i]) addKept(c.poly); });
+    const inBoxes = ([x, y]) =>
+      boxes.some(([x0, y0, x1, y1]) => x > x0 && x < x1 && y > y0 && y < y1);
+    const overlapsLit = (ring) => { // stacked parts: footprint sits on a lit one
+      let cx = 0, cy = 0;
+      ring.forEach(([x, y]) => { cx += x; cy += y; });
+      if (inBoxes([cx / ring.length, cy / ring.length])) return true;
+      return ring.some(inBoxes);
+    };
+    const besideLit = (ring) => ring.some(([x, y]) => {
       const cx = Math.round(x / CELL), cy = Math.round(y / CELL);
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
         if (grid.has(`${cx + dx},${cy + dy}`)) return true;
       return false;
     });
-    cands.forEach((c, i) => { if (!kept[i] && touchesLit(c.poly[0])) kept[i] = true; });
+    // one sideways pass (podium next to seed), then cascade upwards only —
+    // overlap/building-id based, so inset crowns and sibling parts chain
+    // through their complex without flooding the whole downtown via
+    // street-to-street adjacency
+    cands.forEach((c, i) => {
+      if (!kept[i] && (overlapsLit(c.poly[0]) || besideLit(c.poly[0]))) {
+        kept[i] = true; addKept(c.poly);
+        if (c.bid != null) bids.add(c.bid);
+      }
+    });
+    for (let pass = 0, changed = true; changed && pass < 4; pass++) {
+      changed = false;
+      cands.forEach((c, i) => {
+        if (!kept[i] && ((c.bid != null && bids.has(c.bid)) || overlapsLit(c.poly[0]))) {
+          kept[i] = true; addKept(c.poly); changed = true;
+          if (c.bid != null) bids.add(c.bid);
+        }
+      });
+    }
     cands.forEach((c, i) => {
       if (!kept[i]) return;
       // the slice band is part of the dedup key, or every band above the
@@ -920,7 +958,7 @@ const PHASES = [
       if (ms > 4100 && !this._lit) { // after the pull-back has settled
         this._lit = true;
         const script = () => {
-          lightBuildingsAt(DBS_TOWER, "amber", 42, 70); // the origin tower stays amber
+          lightBuildingsAt(DBS_TOWER, "amber", 60, 120); // the origin block stays amber
           for (const k of ["ocbc", "ngs", "frasers", "with"]) {
             const s = SITES.find((x) => x.key === k);
             lightBuildingsAt(s.coords, "cyan", 90, 140); // neighbours ignite together
