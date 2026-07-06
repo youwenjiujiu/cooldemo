@@ -650,7 +650,16 @@ const PHASES = [
     update(ms, now) {
       if (ms > 5300 && !this._lit) { // after the fly-to has landed
         this._lit = true;
-        lightBuildingsAt(CHANGI_TERMINALS, "amber", 260, 700);
+        const script = () => lightBuildingsAt(CHANGI_TERMINALS, "amber", 260, 700);
+        script();
+        // tiles may still be loading mid-fly: once fully loaded, requery so the
+        // glow shells pick up real heights instead of low-zoom placeholders
+        map.once("idle", () => {
+          if (cur === 1 && this._lit) { unlightBuildings(); script(); }
+        });
+        setTimeout(() => {
+          if (cur === 1 && this._lit) { unlightBuildings(); script(); }
+        }, 2200);
         $("#bloom-changi").classList.add("on");
         igniteSite(0);
         loctag("EE · Changi Airport · HVAC Optimization");
@@ -680,12 +689,21 @@ const PHASES = [
     update(ms, now) {
       if (ms > 5100 && !this._lit) { // after the fly-to has landed
         this._lit = true;
-        // the monitored portfolio lights up healthy cyan
-        for (const k of ["dbs", "ocbc", "ngs", "frasers", "with"]) {
-          const s = SITES.find((x) => x.key === k);
-          lightBuildingsAt(s.coords, "cyan", 90, 140);
-          igniteSite(s.id);
-        }
+        const script = () => {
+          for (const k of ["dbs", "ocbc", "ngs", "frasers", "with"]) {
+            const s = SITES.find((x) => x.key === k);
+            lightBuildingsAt(s.coords, "cyan", 90, 140);
+            igniteSite(s.id);
+          }
+        };
+        script();
+        // requery once tiles finish loading: full-height shells, not flat placeholders
+        map.once("idle", () => {
+          if (cur === 2 && this._lit) { unlightBuildings(); script(); }
+        });
+        setTimeout(() => {
+          if (cur === 2 && this._lit) { unlightBuildings(); script(); }
+        }, 2200);
         $("#bloom-cbd").classList.add("on");
         loctag("EM · Portfolio Energy Monitoring");
         showPanels("em");
