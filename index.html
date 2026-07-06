@@ -193,16 +193,6 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 <div id="loctag"></div>
 <div id="caption"><div class="line" id="cap-line"></div></div>
 
-<div id="finale">
-  <h2>One ontology — every signal, one language.</h2>
-  <div class="tag">ONE ASSET TO THE WHOLE CITY · SENSE → PREDICT → DECIDE → ACT</div>
-  <div id="outcomes-row">
-    <span>Energy bill down</span><span>Capex deferred</span>
-    <span>OPEX leaner</span><span>Space &amp; NOI higher</span>
-  </div>
-  <div id="clients"></div>
-</div>
-
 <button id="replay">Replay</button>
 <button id="skip">Skip ▸▸</button>
 
@@ -409,7 +399,7 @@ function setupLayers() {
         0, "#2c4058", 40, "#3a5372", 120, "#4d6c92", 280, "#6488b4"],
       "fill-extrusion-height": BLD.height,
       "fill-extrusion-base": BLD.base,
-      "fill-extrusion-opacity": 0.96,
+      "fill-extrusion-opacity": 1,
       "fill-extrusion-vertical-gradient": true,
     },
   };
@@ -443,7 +433,7 @@ function setupLayers() {
         "amber", "#f0a832", "#49ffef"],
       "fill-extrusion-height": ["get", "h"],
       "fill-extrusion-base": ["get", "b"],
-      "fill-extrusion-opacity": 0.98,
+      "fill-extrusion-opacity": 1,
       "fill-extrusion-vertical-gradient": false,
     },
   };
@@ -606,9 +596,8 @@ function pinBloom(el, lngLat) {
 }
 
 /* =============================== UI =============================== */
-const $finale = $("#finale"), $replay = $("#replay");
+const $replay = $("#replay");
 const $cap = $("#cap-line"), $loc = $("#loctag");
-$("#clients").innerHTML = SITES.map((s) => `<span>${s.org}</span>`).join("");
 
 let capToken = 0;
 function caption(html) {
@@ -776,11 +765,8 @@ const PHASES = [
       map.stop();
       map.easeTo({ center: [103.8520, 1.3180], zoom: 11.2, pitch: 52, bearing: 40,
         duration: dur(26000), easing: (t) => t });
-      $finale.classList.add("in");
-      this._timers = [];
-      document.querySelectorAll("#clients span").forEach((el, i) =>
-        this._timers.push(setTimeout(() => el.classList.add("in"), 900 + i * 130)));
-      this._timers.push(setTimeout(() => $replay.classList.add("in"), 3000));
+      // clean ending: no text overlay, just the living map and a Replay control
+      this._timers = [setTimeout(() => $replay.classList.add("in"), 2400)];
       this._swung = false;
     },
     update(ms, now) {
@@ -793,9 +779,7 @@ const PHASES = [
     },
     exit() {
       (this._timers || []).forEach(clearTimeout);
-      $finale.classList.remove("in");
       $replay.classList.remove("in");
-      document.querySelectorAll("#clients span").forEach((el) => el.classList.remove("in"));
     } },
 ];
 PHASES.reduce((acc, ph) => { ph.start = acc; return acc + ph.dur; }, 0);
