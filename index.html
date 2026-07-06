@@ -595,54 +595,80 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "
     const degLng = maxMeters / 111320;
     const near = (ring) => ring.some(([x, y]) =>
       Math.abs(x - lngLat[0]) < degLng && Math.abs(y - lngLat[1]) < degLat);
+    // buffer each ring ~10m outward along its edge normals: the glow shell
+    // must clear the base facade by whole meters on EVERY wall (centroid
+    // scaling fails on long slabs and concave footprints) or its side faces
+    // lose the depth test to the base building and only the roof reads lit
+    const PAD = 10 / 110574; // ~10 m in degrees (Singapore ≈ equator, lng ≈ lat)
+    const inflate = (poly) => poly.map((ring) => {
+      const pts = ring.slice(0, -1); // drop the closing duplicate
+      const n = pts.length;
+      if (n < 3) return ring;
+      let area = 0;
+      for (let i = 0; i < n; i++) {
+        const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % n];
+        area += x1 * y2 - x2 * y1;
+      }
+      const sgn = area > 0 ? 1 : -1; // outward normal flips with winding
+      const out = pts.map((p, i) => {
+        const prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
+        const norm = (a, b) => {
+          const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+          return [sgn * dy / l, -sgn * dx / l];
+        };
+        const [ax, ay] = norm(prev, p), [bx, by] = norm(p, next);
+        let mx = ax + bx, my = ay + by;
+        const ml = Math.hypot(mx, my);
+        if (ml < 0.35) { mx = ax; my = ay; } // near-reversal: fall back to one edge
+        else { mx /= ml; my /= ml; }
+        const scale = Math.min(2.5, 2 / Math.max(0.8, ml)); // miter, clamped
+        return [p[0] + mx * PAD * scale, p[1] + my * PAD * scale];
+      });
+      out.push(out[0]);
+      return out;
+    });
+    // flatten to individual footprints, one candidate per polygon per slice
+    // (tiles merge many footprints into one (Multi)Polygon, and tall towers
+    // arrive as stacked min_height → height bands sharing one footprint)
+    const cands = [];
     feats.forEach((f) => {
-      // tiles merge many footprints into one (Multi)Polygon — keep only
-      // the polygons actually near the site, drop the far-flung fragments
       const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates]
         : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates : [];
-      // buffer each ring ~10m outward along its edge normals: the glow shell
-      // must clear the base facade by whole meters on EVERY wall (centroid
-      // scaling fails on long slabs and concave footprints) or its side faces
-      // lose the depth test to the base building and only the roof reads lit
-      const PAD = 10 / 110574; // ~10 m in degrees (Singapore ≈ equator, lng ≈ lat)
-      const inflate = (poly) => poly.map((ring) => {
-        const pts = ring.slice(0, -1); // drop the closing duplicate
-        const n = pts.length;
-        if (n < 3) return ring;
-        let area = 0;
-        for (let i = 0; i < n; i++) {
-          const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % n];
-          area += x1 * y2 - x2 * y1;
-        }
-        const sgn = area > 0 ? 1 : -1; // outward normal flips with winding
-        const out = pts.map((p, i) => {
-          const prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
-          const norm = (a, b) => {
-            const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
-            return [sgn * dy / l, -sgn * dx / l];
-          };
-          const [ax, ay] = norm(prev, p), [bx, by] = norm(p, next);
-          let mx = ax + bx, my = ay + by;
-          const ml = Math.hypot(mx, my);
-          if (ml < 0.35) { mx = ax; my = ay; } // near-reversal: fall back to one edge
-          else { mx /= ml; my /= ml; }
-          const scale = Math.min(2.5, 2 / Math.max(0.8, ml)); // miter, clamped
-          return [p[0] + mx * PAD * scale, p[1] + my * PAD * scale];
-        });
-        out.push(out[0]);
-        return out;
-      });
-      const kept = polys.filter((poly) => near(poly[0])).map(inflate);
-      if (!kept.length) return;
-      const key = JSON.stringify(kept[0][0][0]) + tone;
+      const pr = f.properties || {};
+      const b0 = pr.render_min_height ?? pr.min_height ?? 0;
+      const h0 = pr.render_height ?? pr.height ?? 8;
+      polys.forEach((poly) => cands.push({ poly, b0, h0 }));
+    });
+    // pass 1: seed with footprints near the site point
+    const kept = cands.map((c) => near(c.poly[0]));
+    // pass 2: adopt slices standing on or against anything already lit — a
+    // complex is podium + towers in separate features, and a tower whose
+    // podium made the seed radius must not stay dark above a glowing base
+    const CELL = 30 / 110574; // ~30 m adjacency
+    const cellKey = (x, y) => `${Math.round(x / CELL)},${Math.round(y / CELL)}`;
+    const grid = new Set();
+    cands.forEach((c, i) => {
+      if (kept[i]) c.poly[0].forEach(([x, y]) => grid.add(cellKey(x, y)));
+    });
+    const touchesLit = (ring) => ring.some(([x, y]) => {
+      const cx = Math.round(x / CELL), cy = Math.round(y / CELL);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+        if (grid.has(`${cx + dx},${cy + dy}`)) return true;
+      return false;
+    });
+    cands.forEach((c, i) => { if (!kept[i] && touchesLit(c.poly[0])) kept[i] = true; });
+    cands.forEach((c, i) => {
+      if (!kept[i]) return;
+      // the slice band is part of the dedup key, or every band above the
+      // first would be dropped and the tower would light up with gaps
+      const key = `${JSON.stringify(c.poly[0][0])}|${tone}|${c.b0}|${c.h0}`;
       if (litSeen.has(key)) return;
       litSeen.add(key);
-      const pr = f.properties || {};
       litFeatures.push({ type: "Feature", properties: {
           tone, tag,
-          h: Math.min(320, (pr.render_height ?? pr.height ?? 8)) + 3,
-          b: pr.render_min_height ?? pr.min_height ?? 0,
-        }, geometry: { type: "MultiPolygon", coordinates: kept } });
+          h: Math.min(320, c.h0) + 3,
+          b: c.b0,
+        }, geometry: { type: "MultiPolygon", coordinates: [inflate(c.poly)] } });
     });
     map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: litFeatures });
   } catch (e) { /* DOM bloom still carries the moment */ }
