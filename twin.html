@@ -193,7 +193,7 @@ tiles.registerPlugin(new CesiumIonAuthPlugin({
 tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
 tiles.setCamera(camera);
 tiles.setResolutionFromRenderer(camera, renderer);
-tiles.errorTarget = 3;          // stream sharper LODs sooner
+tiles.errorTarget = 2;          // stream the deepest LODs Google offers
 scene.add(tiles.group);
 
 // crisp oblique textures: max anisotropic filtering on every streamed tile
@@ -280,6 +280,59 @@ const clickMeshes = [];
   }
 }
 const byKey = Object.fromEntries(beacons.map((b) => [b.site.key, b]));
+
+/* ---- island-wide mesh network: every asset linked to its nearest neighbours ---- */
+const MESH_EDGES = (() => {
+  const edges = [], seen = new Set();
+  beacons.forEach((a, i) => {
+    beacons.map((c, j) => ({ j, d: a.group.position.distanceTo(c.group.position) }))
+      .filter((x) => x.j !== i)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 2)
+      .forEach(({ j }) => {
+        const key = Math.min(i, j) + "-" + Math.max(i, j);
+        if (!seen.has(key)) { seen.add(key); edges.push([i, j]); }
+      });
+  });
+  return edges;
+})();
+
+const arcs = [];
+const meshGroup = new THREE.Group();
+meshGroup.visible = false;
+scene.add(meshGroup);
+for (const [i, j] of MESH_EDGES) {
+  const a = beacons[i].group.position.clone().add(new THREE.Vector3(0, 220, 0));
+  const b = beacons[j].group.position.clone().add(new THREE.Vector3(0, 220, 0));
+  const mid = a.clone().lerp(b, 0.5);
+  mid.y += 260 + a.distanceTo(b) * 0.14;
+  const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(curve.getPoints(64)),
+    new THREE.LineBasicMaterial({ color: 0x8c9aff, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, depthWrite: false }));
+  meshGroup.add(line);
+  const N = 14;
+  const ppos = new Float32Array(N * 3);
+  const pgeo = new THREE.BufferGeometry();
+  pgeo.setAttribute("position", new THREE.BufferAttribute(ppos, 3));
+  const pts = new THREE.Points(pgeo, new THREE.PointsMaterial({
+    color: 0xbffff8, size: 44, sizeAttenuation: true, transparent: true,
+    opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  meshGroup.add(pts);
+  arcs.push({ curve, pgeo, ppos, N, offset: Math.random() });
+}
+function updateArcs(now) {
+  if (!meshGroup.visible) return;
+  for (const arc of arcs) {
+    for (let k = 0; k < arc.N; k++) {
+      const t = ((now / 5200) + arc.offset + k / arc.N) % 1;
+      const v = arc.curve.getPoint(t);
+      arc.ppos[k * 3] = v.x; arc.ppos[k * 3 + 1] = v.y; arc.ppos[k * 3 + 2] = v.z;
+    }
+    arc.pgeo.attributes.position.needsUpdate = true;
+  }
+}
 
 function ignite(b, delayLabel = 600) {
   if (b.lit) return;
@@ -429,6 +482,7 @@ function declutterLabels(now) {
     if (!b.lit) { continue; }
     declutterV.copy(b.group.position).setY(b.group.position.y + b.label.position.y);
     const dist = declutterV.distanceTo(camera.position);
+    if (dist < 750) { b.labelHidden = true; continue; }  // too close: name would fill the screen
     const p = declutterV.clone().project(camera);
     if (p.z > 1) { b.labelHidden = true; continue; }
     const sx = (p.x * 0.5 + 0.5) * innerWidth;
@@ -501,6 +555,7 @@ const INTRO = [
       let i = 0;
       for (const b of beacons) if (b.site.tier === "mock")
         setTimeout(() => ignite(b, 300), 1200 + (i++) * 140);
+      setTimeout(() => { meshGroup.visible = true; }, 4200); // the island becomes one grid
     } },
 ];
 
@@ -528,6 +583,7 @@ function runIntro(now) {
 function startIntro() { introStart = performance.now(); }
 function skipIntro() {
   for (const b of beacons) ignite(b, 0);
+  meshGroup.visible = true;
   hideTuneCard();
   endIntro();
   resetView();
@@ -673,6 +729,7 @@ function frame() {
   }
 
   if (assetCard && assetCardAnchor) pinCard(assetCard, assetCardAnchor);
+  updateArcs(now);
   updateTuneCard(now);
   updateFDD(now);
 
