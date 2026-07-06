@@ -67,13 +67,18 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 #panel-outcome .s-head b { color: var(--amber); }
 .side .s-mod { font-size: 13px; font-weight: 600; color: #fff; letter-spacing: .06em;
   margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(120,200,220,.14); }
-.side ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
-.side li { font-size: 12.5px; line-height: 1.45; color: var(--text); display: flex; gap: 9px;
+.side ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.side li { font-size: 13px; line-height: 1.4; color: var(--text); display: flex; gap: 9px;
   opacity: 0; transform: translateY(8px); transition: opacity .5s ease, transform .5s ease; }
 .side.in li { opacity: 1; transform: translateY(0); }
+.side.in li.dim { opacity: .3; }
+.side li .t { font-weight: 600; letter-spacing: .02em; }
+.side li small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px;
+  line-height: 1.4; }
 .side li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none;
   margin-top: 6px; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
-#panel-outcome li::before { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.side li.dim::before { background: #4a5b68; box-shadow: none; }
+#panel-outcome li:not(.dim)::before { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
 
 /* location tag (small eyebrow above captions during close-ups) */
 #loctag { position: absolute; left: 50%; bottom: calc(10% + 74px); transform: translateX(-50%);
@@ -232,42 +237,60 @@ const CAPS = {
   fabric:  'Together they run as one — <em>sense, predict, decide, act</em> — across the whole city.',
 };
 
-/* DATA / OUTCOME side-panel content per module — follows the storyline */
+/* DATA / OUTCOME side panels — fixed slide vocabulary; each module lights up
+   the dimensions it touches and annotates them. */
+const DATA_ITEMS = ["Energy", "Assets", "People", "Space", "Environment"];
+const OUTCOME_ITEMS = ["Energy bill 8–15% ↓", "Capex deferred ↓", "OPEX leaner ↓", "Space & NOI higher ↑"];
 const PANELS = {
   ee: {
     mod: "EE · HVAC Optimization",
-    data: ["Chiller plant telemetry — load, kW/RT", "Zone temperature & humidity",
-      "Flight schedule & passenger flow", "Weather & wet-bulb forecast",
-      "AHU, valve & pump states"],
-    outcome: ["Cooling energy down 8–15%", "Comfort held to SLA",
-      "Plant efficiency up (kW/RT)", "Carbon intensity down"],
+    data: {
+      Energy: "chiller plant telemetry — load, kW/RT",
+      People: "flight schedule & passenger flow",
+      Environment: "weather & wet-bulb forecast",
+    },
+    outcome: { "Energy bill 8–15% ↓": "cooling retuned in real time" },
   },
   em: {
     mod: "EM · Energy Monitoring",
-    data: ["Utility & sub-meter interval data", "Rooftop solar generation",
-      "Tenant & floor submetering", "Power quality & demand profile",
-      "One ontology across every asset"],
-    outcome: ["One live picture of the portfolio", "Waste & anomalies surfaced",
-      "Building-to-building benchmarking", "Audit-ready ESG reporting"],
+    data: {
+      Energy: "every utility & sub-meter, plus solar",
+      Assets: "one ontology across the portfolio",
+      Space: "tenant & floor submetering",
+    },
+    outcome: {
+      "Energy bill 8–15% ↓": "savings measured & verified",
+      "OPEX leaner ↓": "waste & anomalies surfaced",
+    },
   },
   ioc: {
     mod: "IoC · Integration of Control",
-    data: ["Every BMS point, every protocol", "Live control states, all assets",
-      "FDD fault signatures", "Maintenance & work-order feeds"],
-    outcome: ["Faults resolved before complaints", "Reactive → predictive maintenance",
-      "One team runs the whole portfolio", "Uptime & resilience up"],
+    data: {
+      Energy: "live control states, island-wide",
+      Assets: "every BMS point, every protocol — FDD fault signatures",
+      People: "comfort held while control shifts",
+    },
+    outcome: {
+      "OPEX leaner ↓": "reactive → predictive maintenance",
+      "Capex deferred ↓": "equipment runs longer, replaced later",
+      "Space & NOI higher ↑": "uptime, comfort, resilience",
+    },
   },
 };
 function showPanels(key) {
   const p = PANELS[key];
-  [["#panel-data", p.data], ["#panel-outcome", p.outcome]].forEach(([sel, items]) => {
-    const el = $(sel);
-    el.querySelector(".s-mod").textContent = p.mod;
-    el.querySelector("ul").innerHTML = items.map((t, i) =>
-      `<li style="transition-delay:${200 + i * 120}ms">${t}</li>`).join("");
-    el.classList.remove("in");
-    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("in")));
-  });
+  [["#panel-data", DATA_ITEMS, p.data], ["#panel-outcome", OUTCOME_ITEMS, p.outcome]]
+    .forEach(([sel, items, active]) => {
+      const el = $(sel);
+      el.querySelector(".s-mod").textContent = p.mod;
+      el.querySelector("ul").innerHTML = items.map((t, i) => {
+        const sub = active[t];
+        return `<li class="${sub ? "" : "dim"}" style="transition-delay:${200 + i * 110}ms">
+          <div><div class="t">${t}</div>${sub ? `<small>${sub}</small>` : ""}</div></li>`;
+      }).join("");
+      el.classList.remove("in");
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("in")));
+    });
 }
 function hidePanels() {
   ["#panel-data", "#panel-outcome"].forEach((s) => $(s).classList.remove("in"));
