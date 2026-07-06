@@ -236,6 +236,20 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   color: var(--cyan); margin-bottom: 6px; }
 #sitecard .sc-live { font-size: 11px; color: var(--muted); line-height: 1.5; }
 #sitecard .sc-live b { color: #ffe9c4; font-weight: 600; }
+#sitecard .m-grid { display: grid; grid-template-columns: 1fr auto; gap: 4px 20px;
+  margin-top: 9px; }
+#sitecard .m-grid .k { font-size: 10px; color: var(--muted); letter-spacing: .08em;
+  text-transform: uppercase; align-self: center; }
+#sitecard .m-grid .v { font-size: 12.5px; color: #bffff6; font-weight: 600;
+  text-align: right; font-variant-numeric: tabular-nums; }
+#sitecard .sc-note { margin-top: 9px; font-size: 9px; color: rgba(160, 185, 195, .5);
+  letter-spacing: .16em; text-transform: uppercase; }
+
+/* standing invitation to interact — this is an app, not a video */
+#hint { position: absolute; bottom: 20px; left: 24px; z-index: 20; pointer-events: none;
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted); opacity: .75; text-shadow: 0 1px 8px rgba(0,0,0,.8); }
+#hint b { color: var(--cyan); font-weight: 600; }
 
 /* controls */
 #replay { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
@@ -284,6 +298,7 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 <div id="caption"><div class="line" id="cap-line"></div></div>
 
 <div id="sitecard"></div>
+<div id="hint"><b>drag</b> to explore · <b>click</b> any building for live data</div>
 <button id="resume">▶ Resume tour</button>
 <button id="replay">Replay</button>
 <button id="skip">Skip ▸▸</button>
@@ -1301,6 +1316,55 @@ function wireExplore() {
     map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
   });
+
+  // ANY real building is inspectable: click one and its live telemetry card
+  // opens — the whole map is the digital twin, not just the 35 story assets
+  map.on("click", "bld-3d", (e) => {
+    const markers = ["site-core", "site-label", "syn-bld-3d"].filter((l) => map.getLayer(l));
+    if (map.queryRenderedFeatures(e.point, { layers: markers }).length) return; // asset handler wins
+    const f = e.features && e.features[0];
+    if (!f) return;
+    enterExplore();
+    lightBuildingsAt([e.lngLat.lng, e.lngLat.lat], "cyan", 8, 22);
+    showBuildingCard(f, e.lngLat);
+  });
+  map.on("mouseenter", "bld-3d", () => { map.getCanvas().style.cursor = "pointer"; });
+  map.on("mouseleave", "bld-3d", () => { map.getCanvas().style.cursor = ""; });
+  // clicking empty ground puts the card away
+  map.on("click", (e) => {
+    const layers = ["bld-3d", "site-core", "site-label", "syn-bld-3d"].filter((l) => map.getLayer(l));
+    if (!map.queryRenderedFeatures(e.point, { layers }).length)
+      $("#sitecard").classList.remove("in");
+  });
+}
+
+// deterministic mock telemetry seeded by location: the same building always
+// reports the same numbers, so a demo walkthrough feels like a stable system
+function showBuildingCard(f, ll) {
+  const pr = f.properties || {};
+  const h = Math.round(pr.render_height ?? pr.height ?? 12);
+  const floors = Math.max(1, Math.round(h / 3.6));
+  const rawType = pr.type && pr.type !== "building" && pr.type !== "building:part"
+    ? pr.type.replace(/_/g, " ") : "commercial";
+  const type = rawType[0].toUpperCase() + rawType.slice(1);
+  const seed = Math.abs(Math.sin(ll.lng * 991.7 + ll.lat * 773.3)) * 1000;
+  const s = (n) => { const x = Math.sin(seed + n * 17.17) * 43758.5453; return x - Math.floor(x); };
+  const rt = Math.round(90 + h * 2.1 + s(1) * 320);
+  const eff = (0.58 + s(2) * 0.24).toFixed(2);
+  const mwh = (rt * 0.019 + s(3) * 3.2 + 1.2).toFixed(1);
+  const occ = Math.round(48 + s(4) * 45);
+  const mins = 2 + Math.round(s(5) * 7);
+  $("#sitecard").innerHTML = `<h4>${type} · ${h} m · ${floors}F</h4>
+    <div class="sc-sub">asset online · EE optimizing · setpoints updated ${mins} min ago</div>
+    <div class="m-grid">
+      <span class="k">Cooling load</span><span class="v">${rt} RT</span>
+      <span class="k">Plant efficiency</span><span class="v">${eff} kW/RT</span>
+      <span class="k">Energy today</span><span class="v">${mwh} MWh</span>
+      <span class="k">Occupancy</span><span class="v">${occ}%</span>
+      <span class="k">FDD</span><span class="v">no open faults</span>
+    </div>
+    <div class="sc-note">demo telemetry · one ontology · AIP</div>`;
+  $("#sitecard").classList.add("in");
 }
 
 function frame(now) {
