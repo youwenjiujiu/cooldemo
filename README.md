@@ -57,3 +57,14 @@ version: photorealistic Google 3D Tiles Singapore, free-fly + clickable assets,
 the same three storylines. Start with `unreal/README-SETUP.md`; architecture and
 roadmap in `unreal/DESIGN.md`. Site/fault data in `unreal/Content/Data/` mirrors
 the web version's `SITES`/`FAULTS`.
+
+## twin.html — 浏览器版交互式数字孪生（主力版本）
+
+three.js + Google Photorealistic 3D Tiles（经 Cesium ion，复用同一 token）。
+开场三章节自动导览（Energy Efficiency → Energy Management → IoC·FDD）后进入自由探索：
+拖动环视、WASD 飞行、滚轮调速、点击光柱弹资产卡、FDD 故障事件周期性上演、R 回起点。
+
+运行：项目根目录建 `keys.js`（gitignored）：`const ION_TOKEN = "你的 ion token";`
+然后 `python3 -m http.server 8000` 打开 `/twin.html`。
+
+UE5 版（unreal/）保留为展厅级备选。

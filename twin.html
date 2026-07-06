@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Univers AIP — Singapore Live Twin</title>
+<style>
+:root {
+  --cyan: #38e1d6; --amber: #ffb84d; --violet: #8c9aff; --red: #ff6b5d; --green: #4dffa6;
+  --text: #eaf6f8; --muted: #7e93a3;
+}
+html, body { margin: 0; height: 100%; background: #0a1420; overflow: hidden;
+  font-family: "Space Grotesk", "Avenir Next", -apple-system, "Segoe UI", system-ui, sans-serif;
+  color: var(--text); }
+canvas { display: block; }
+
+#title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; z-index: 10; pointer-events: none;
+  opacity: 0; transition: opacity 1.2s ease; text-shadow: 0 2px 30px rgba(0,0,0,.8); }
+#title.in { opacity: 1; }
+#title .eyebrow { font-size: 12px; letter-spacing: .3em; color: #dfe9ee; text-transform: uppercase; }
+#title h1 { font-size: clamp(40px, 6.5vw, 84px); font-weight: 700; margin: 14px 0 6px;
+  letter-spacing: .1em; color: #fff; }
+#title .sub { font-size: clamp(13px, 1.5vw, 17px); color: #d7e2e8; letter-spacing: .06em; }
+
+#chapter { position: absolute; top: 24px; left: 28px; z-index: 10; pointer-events: none;
+  font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #fff;
+  opacity: 0; transition: opacity .8s ease; text-shadow: 0 2px 14px rgba(0,0,0,.9); }
+#chapter b { color: var(--cyan); font-weight: 600; }
+#chapter.in { opacity: .95; }
+
+#hint { position: absolute; bottom: 18px; left: 24px; z-index: 10; pointer-events: none;
+  font-size: 12.5px; letter-spacing: .06em; color: rgba(255,255,255,.75);
+  text-shadow: 0 1px 8px rgba(0,0,0,.9); opacity: 0; transition: opacity .8s ease; }
+#hint.in { opacity: 1; }
+
+#skip { position: absolute; bottom: 18px; right: 22px; background: rgba(10,16,24,.6);
+  border: 1px solid rgba(56,225,214,.4); color: var(--cyan); border-radius: 20px;
+  padding: 8px 22px; font-family: inherit; font-size: 12px; letter-spacing: .18em;
+  text-transform: uppercase; cursor: pointer; z-index: 20; }
+#skip:hover { background: rgba(56,225,214,.18); }
+#skip.hidden { display: none; }
+
+#loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; z-index: 30; background: #0a1420;
+  transition: opacity .8s ease; }
+#loading.done { opacity: 0; pointer-events: none; }
+#loading .ring { width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid rgba(56,225,214,.18); border-top-color: var(--cyan);
+  animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading .msg { color: var(--muted); font-size: 13px; letter-spacing: .14em; }
+
+/* anchored cards (story lives on the buildings) */
+.card { position: absolute; z-index: 11; pointer-events: none; width: 264px;
+  transform: translate(16px, -50%); background: rgba(10,16,24,.9);
+  border: 1px solid rgba(56,225,214,.5); border-radius: 10px; padding: 11px 14px;
+  backdrop-filter: blur(10px); opacity: 0; transition: opacity .4s ease, border-color .5s ease; }
+.card.in { opacity: 1; }
+.card.fault { border-color: rgba(255,107,93,.55); }
+.card.fault.resolved { border-color: rgba(77,255,166,.55); }
+.card .site { font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px; }
+.card .ln { font-size: 11.5px; line-height: 1.5; display: none; gap: 7px; color: var(--text); }
+.card .ln::before { content: "▸"; font-size: 9px; margin-right: 6px; }
+.card .ln.show { display: block; }
+.card b { font-weight: 600; }
+.card .ln.sense::before, .card .ln.sense b { color: var(--cyan); }
+.card .ln.predict::before, .card .ln.predict b { color: var(--violet); }
+.card .ln.act::before, .card .ln.act b { color: var(--amber); }
+.card .ln.em::before, .card .ln.em b { color: var(--cyan); }
+.card .ln.ok::before, .card .ln.ok b { color: var(--green); }
+.card .ln.detect::before, .card .ln.detect b { color: var(--red); }
+.card .ln.diag::before, .card .ln.diag b { color: var(--amber); }
+.card .ln.dispatch::before, .card .ln.dispatch b { color: var(--violet); }
+.card .ln.done::before, .card .ln.done b { color: var(--green); }
+.card canvas { width: 100%; height: 42px; display: none; margin-top: 8px; }
+.card canvas.show { display: block; }
+</style>
+</head>
+<body>
+<div id="loading"><div class="ring"></div><div class="msg">STREAMING SINGAPORE…</div></div>
+
+<div id="title">
+  <div class="eyebrow">Univers · AIP for Physical Infrastructure</div>
+  <h1>RUN AS ONE</h1>
+  <div class="sub">Energy · Assets · People · Space · Environment — the built environment, run as one</div>
+</div>
+
+<div id="chapter"></div>
+<div id="hint">拖动 环视 · WASD 飞行 · Q/E 升降 · 滚轮 调速 · 点击光柱 看资产 · R 回到起点</div>
+<button id="skip">Skip intro ▸▸</button>
+
+<script src="keys.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+  "3d-tiles-renderer": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.js",
+  "3d-tiles-renderer/plugins": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.plugins.js",
+  "3d-tiles-renderer/core": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.core.js",
+  "3d-tiles-renderer/three": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.three.js"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { TilesRenderer, WGS84_ELLIPSOID } from "3d-tiles-renderer";
+import { CesiumIonAuthPlugin, GLTFExtensionsPlugin } from "3d-tiles-renderer/plugins";
+
+/* ================= DATA ================= */
+const SITES = [
+  { key:"changi",  org:"Changi Airport",  lng:103.9865, lat:1.3644, tier:"hero", tone:"amber" },
+  { key:"dbs",     org:"DBS",             lng:103.8540, lat:1.2790, tier:"hero", tone:"cyan" },
+  { key:"ocbc",    org:"OCBC",            lng:103.8492, lat:1.2846, tier:"hero", tone:"cyan" },
+  { key:"ngs",     org:"NGS",             lng:103.8513, lat:1.2903, tier:"hero", tone:"cyan" },
+  { key:"frasers", org:"Frasers",         lng:103.8465, lat:1.2770, tier:"hero", tone:"cyan" },
+  { key:"with",    org:"WITH",            lng:103.8450, lat:1.2815, tier:"hero", tone:"cyan" },
+  { key:"psa",     org:"PSA",             lng:103.8030, lat:1.2740, tier:"hero", tone:"cyan" },
+  { key:"mse",     org:"MSE",             lng:103.8320, lat:1.3110, tier:"hero", tone:"cyan" },
+  { key:"hdb",     org:"HDB",             lng:103.8490, lat:1.3330, tier:"hero", tone:"cyan" },
+  { key:"stengg",  org:"ST Engineering",  lng:103.8510, lat:1.3790, tier:"hero", tone:"cyan" },
+  { key:"htx",     org:"HTX",             lng:103.7880, lat:1.3070, tier:"hero", tone:"cyan" },
+  { key:"m0",  org:"Tuas Mega Port",            lng:103.6480, lat:1.2830, tier:"mock", tone:"cyan" },
+  { key:"m1",  org:"Jurong Island Energy Hub",  lng:103.7000, lat:1.2660, tier:"mock", tone:"cyan" },
+  { key:"m2",  org:"Jurong Logistics Campus",   lng:103.7430, lat:1.3340, tier:"mock", tone:"cyan" },
+  { key:"m3",  org:"NTU Smart Campus",          lng:103.6830, lat:1.3480, tier:"mock", tone:"cyan" },
+  { key:"m4",  org:"Tengah Eco Town",           lng:103.7160, lat:1.3740, tier:"mock", tone:"cyan" },
+  { key:"m5",  org:"Kranji AgriTech Park",      lng:103.7620, lat:1.4250, tier:"mock", tone:"cyan" },
+  { key:"m6",  org:"Woodlands Health Campus",   lng:103.7860, lat:1.4370, tier:"mock", tone:"cyan" },
+  { key:"m7",  org:"Sembawang Shipyard",        lng:103.8200, lat:1.4490, tier:"mock", tone:"cyan" },
+  { key:"m8",  org:"Yishun Community Hub",      lng:103.8350, lat:1.4290, tier:"mock", tone:"cyan" },
+  { key:"m9",  org:"Mandai Wildlife Reserve",   lng:103.7890, lat:1.4040, tier:"mock", tone:"cyan" },
+  { key:"m10", org:"Seletar Aerospace Park",    lng:103.8670, lat:1.4100, tier:"mock", tone:"cyan" },
+  { key:"m11", org:"Punggol Digital District",  lng:103.9060, lat:1.4050, tier:"mock", tone:"cyan" },
+  { key:"m12", org:"Sengkang Grid Cluster",     lng:103.8950, lat:1.3920, tier:"mock", tone:"cyan" },
+  { key:"m13", org:"Pasir Ris Central",         lng:103.9490, lat:1.3730, tier:"mock", tone:"cyan" },
+  { key:"m14", org:"Tampines Regional Centre",  lng:103.9450, lat:1.3540, tier:"mock", tone:"cyan" },
+  { key:"m15", org:"Changi Business Park",      lng:103.9640, lat:1.3340, tier:"mock", tone:"cyan" },
+  { key:"m16", org:"Expo & Convention Centre",  lng:103.9610, lat:1.3350, tier:"mock", tone:"cyan" },
+  { key:"m17", org:"Bedok Integrated Complex",  lng:103.9300, lat:1.3240, tier:"mock", tone:"cyan" },
+  { key:"m18", org:"Paya Lebar Quarter",        lng:103.8930, lat:1.3180, tier:"mock", tone:"cyan" },
+  { key:"m19", org:"Kallang Sports Hub",        lng:103.8740, lat:1.3040, tier:"mock", tone:"cyan" },
+  { key:"m20", org:"Orchard Retail Belt",       lng:103.8320, lat:1.3040, tier:"mock", tone:"cyan" },
+  { key:"m21", org:"one-north Innovation Park", lng:103.7870, lat:1.2990, tier:"mock", tone:"cyan" },
+  { key:"m22", org:"Mapletree Business City",   lng:103.7990, lat:1.2760, tier:"mock", tone:"cyan" },
+  { key:"m23", org:"Sentosa Resorts",           lng:103.8300, lat:1.2490, tier:"mock", tone:"cyan" },
+];
+const FAULTS = [
+  { key:"hdb", detect:"Chiller efficiency drift", cause:"Condenser fouling" },
+  { key:"m6",  detect:"AHU supply-air anomaly",   cause:"Stuck damper actuator" },
+  { key:"m14", detect:"Cooling-tower vibration",  cause:"Fan bearing wear" },
+  { key:"m11", detect:"BESS cell temperature rise", cause:"Cooling loop airlock" },
+  { key:"psa", detect:"Crane substation load spike", cause:"Harmonic distortion" },
+];
+
+const ORIGIN = { lng: 103.8200, lat: 1.3400 };
+const M_LNG = 111320 * Math.cos(ORIGIN.lat * Math.PI / 180);
+const M_LAT = 110540;
+const toLocal = (lng, lat) => new THREE.Vector3(
+  (lng - ORIGIN.lng) * M_LNG, 0, -(lat - ORIGIN.lat) * M_LAT);
+
+const COLORS = { cyan: 0x38e1d6, amber: 0xffb84d, red: 0xff6b5d };
+
+/* ================= RENDERER / SCENE ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9cc0dd);
+scene.fog = new THREE.Fog(0x9cc0dd, 30000, 220000);
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 2, 2e6);
+camera.position.set(0, 16000, 24000);
+camera.lookAt(1500, 0, 3000);
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ================= GOOGLE 3D TILES ================= */
+const draco = new DRACOLoader();
+draco.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+
+const tiles = new TilesRenderer();
+tiles.registerPlugin(new CesiumIonAuthPlugin({
+  apiToken: ION_TOKEN, assetId: "2275207", autoRefreshToken: true }));
+tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
+tiles.setCamera(camera);
+tiles.setResolutionFromRenderer(camera, renderer);
+tiles.errorTarget = 8;
+scene.add(tiles.group);
+
+// re-orient the globe: Singapore origin at (0,0,0), Y up, north = -Z
+{
+  const enu = new THREE.Matrix4();
+  WGS84_ELLIPSOID.getEastNorthUpFrame(
+    ORIGIN.lat * Math.PI / 180, ORIGIN.lng * Math.PI / 180, 0, enu);
+  tiles.group.matrix.makeRotationX(-Math.PI / 2)
+    .multiply(enu.clone().invert());
+  tiles.group.matrix.decompose(
+    tiles.group.position, tiles.group.quaternion, tiles.group.scale);
+}
+
+let tilesReady = false;
+tiles.addEventListener("load-tile-set", () => {
+  if (!tilesReady) {
+    tilesReady = true;
+    document.getElementById("loading").classList.add("done");
+    startIntro();
+  }
+});
+
+/* ================= BEACONS ================= */
+function labelSprite(text, hero) {
+  const c = document.createElement("canvas").getContext("2d");
+  c.font = "600 46px 'Space Grotesk','Avenir Next',sans-serif";
+  const w = Math.ceil(c.measureText(text).width) + 44;
+  const cv = c.canvas; cv.width = w; cv.height = 80;
+  const c2 = cv.getContext("2d");
+  c2.font = "600 46px 'Space Grotesk','Avenir Next',sans-serif";
+  c2.textAlign = "center"; c2.textBaseline = "middle";
+  c2.shadowColor = "rgba(0,0,0,.9)"; c2.shadowBlur = 12;
+  c2.fillStyle = "#f2fbfb";
+  c2.fillText(text, w / 2, 40);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthTest: false }));
+  const s = hero ? 9.0 : 5.6;
+  sp.scale.set(w * s, 80 * s, 1);
+  return sp;
+}
+
+const beacons = [];
+const clickMeshes = [];
+{
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
+  for (const s of SITES) {
+    const hero = s.tier === "hero";
+    const g = new THREE.Group();
+    g.position.copy(toLocal(s.lng, s.lat));
+    const H = hero ? 340 : 210, R = hero ? 11 : 7;
+
+    const core = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({
+      color: COLORS[s.tone], transparent: true, opacity: 0.9 }));
+    core.scale.set(R, H, R); core.position.y = H / 2;
+    g.add(core);
+
+    const shell = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({
+      color: COLORS[s.tone], transparent: true, opacity: 0.18,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+    shell.scale.set(R * 2.6, H, R * 2.6); shell.position.y = H / 2;
+    g.add(shell);
+
+    const label = labelSprite(s.org, hero);
+    label.position.y = H + (hero ? 120 : 80);
+    g.add(label);
+
+    g.visible = false;
+    scene.add(g);
+    core.userData.site = s;
+    clickMeshes.push(core);
+    beacons.push({ site: s, group: g, core, shell, label,
+      baseColor: COLORS[s.tone], grounded: false, lit: false, pulse: Math.random() * 6 });
+  }
+}
+const byKey = Object.fromEntries(beacons.map((b) => [b.site.key, b]));
+
+function ignite(b, delayLabel = 600) {
+  if (b.lit) return;
+  b.lit = true; b.group.visible = true;
+  setTimeout(() => { b.label.material.opacity = 0.95; }, delayLabel);
+}
+
+// settle beacon bases onto the streamed terrain (retry until a ray connects)
+const groundRay = new THREE.Raycaster();
+function settleBeacons() {
+  for (const b of beacons) {
+    if (b.grounded) continue;
+    groundRay.set(
+      b.group.position.clone().setY(5000), new THREE.Vector3(0, -1, 0));
+    const hit = groundRay.intersectObject(tiles.group, true)[0];
+    if (hit) { b.group.position.y = hit.point.y - 8; b.grounded = true; }
+  }
+}
+setInterval(() => { if (tilesReady) settleBeacons(); }, 2500);
+
+/* ================= ANCHORED CARDS ================= */
+function makeCard(site, lines, cls = "") {
+  const el = document.createElement("div");
+  el.className = "card " + cls;
+  el.innerHTML = `<div class="site">${site}</div>` + lines.map(([c, html]) =>
+    `<div class="ln ${c}">${html}</div>`).join("") +
+    (cls === "tune" ? `<canvas width="236" height="42"></canvas>` : "");
+  document.body.appendChild(el);
+  return el;
+}
+function pinCard(el, worldPos) {
+  const p = worldPos.clone().project(camera);
+  const behind = p.z > 1;
+  el.style.display = behind ? "none" : "block";
+  el.style.left = ((p.x * 0.5 + 0.5) * innerWidth) + "px";
+  el.style.top = ((-p.y * 0.5 + 0.5) * innerHeight) + "px";
+}
+
+/* asset card (click) */
+let assetCard = null, assetCardAnchor = null;
+function showAssetCard(b) {
+  hideAssetCard();
+  const s = b.site;
+  let lines;
+  if (s.key === "changi") {
+    lines = [
+      ["em", "<b>Energy Efficiency</b> — flagship site"],
+      ["sense", "<b>Sensing</b> — flights · passengers · weather"],
+      ["predict", "<b>Predicting</b> — cooling demand ahead"],
+      ["act", "<b>Acting</b> — setpoints retuned live"],
+    ];
+  } else {
+    lines = [
+      ["em", s.tier === "hero" ? "<b>Energy Management</b> — client portfolio"
+                               : "<b>Energy Management</b> — island coverage"],
+      ["em", "Managed as one system, island-wide"],
+      ["ok", "<b>FDD</b> — monitored · no active faults"],
+    ];
+  }
+  assetCard = makeCard(s.org.toUpperCase(), lines);
+  assetCard.querySelectorAll(".ln").forEach((l) => l.classList.add("show"));
+  requestAnimationFrame(() => assetCard.classList.add("in"));
+  assetCardAnchor = b.group.position.clone().add(new THREE.Vector3(0, 260, 0));
+}
+function hideAssetCard() {
+  if (assetCard) { assetCard.remove(); assetCard = null; assetCardAnchor = null; }
+}
+
+/* ================= FLY CONTROLS ================= */
+const keys = new Set();
+let speed = 900;                  // metres per second
+let yaw = Math.atan2(-1500, -(-21000)); // roughly facing initial look
+let pitch = -0.55;
+let controlsEnabled = false;
+let focus = null, flyTarget = null;
+
+function syncCameraRotation() {
+  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, "YXZ"));
+}
+
+addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  keys.add(e.code);
+  if (e.code === "KeyR") resetView();
+  if (!introDone) skipIntro();
+});
+addEventListener("keyup", (e) => keys.delete(e.code));
+
+let dragging = false, moved = 0, lastX = 0, lastY = 0;
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+});
+addEventListener("pointermove", (e) => {
+  if (!dragging || !controlsEnabled) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  moved += Math.abs(dx) + Math.abs(dy);
+  yaw -= dx * 0.0026;
+  pitch = Math.max(-1.45, Math.min(0.6, pitch - dy * 0.0026));
+  syncCameraRotation();
+  flyTarget = null;
+});
+addEventListener("pointerup", (e) => {
+  const wasClick = dragging && moved < 6;
+  dragging = false;
+  if (!controlsEnabled) { if (!introDone) skipIntro(); return; }
+  if (!wasClick) return;
+  // click: pick a beacon
+  const ndc = new THREE.Vector2(
+    (e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(clickMeshes, false)
+    .find((h) => h.object.parent.visible);
+  if (hit) focusBeacon(byKey[hit.object.userData.site.key]);
+  else { if (focus) { focus = null; hideAssetCard(); } flyTarget = null; }
+});
+renderer.domElement.addEventListener("wheel", (e) => {
+  speed = Math.max(120, Math.min(12000, speed * (e.deltaY > 0 ? 0.85 : 1.18)));
+});
+
+function focusBeacon(b) {
+  focus = b;
+  showAssetCard(b);
+  const dir = camera.position.clone().sub(b.group.position).setY(0).normalize();
+  flyTarget = b.group.position.clone()
+    .add(dir.multiplyScalar(1350)).add(new THREE.Vector3(0, 620, 0));
+}
+function resetView() {
+  flyTarget = null; focus = null; hideAssetCard();
+  camera.position.set(3500, 2600, 11000);
+  yaw = Math.PI + 0.25; pitch = -0.28;
+  syncCameraRotation();
+}
+
+/* altitude guard */
+const guardRay = new THREE.Raycaster();
+let lastGuard = 0;
+function altitudeGuard(now) {
+  if (now - lastGuard < 250) return;
+  lastGuard = now;
+  guardRay.set(camera.position.clone().add(new THREE.Vector3(0, 3000, 0)),
+    new THREE.Vector3(0, -1, 0));
+  guardRay.far = 100000;
+  const hit = guardRay.intersectObject(tiles.group, true)[0];
+  if (hit && camera.position.y < hit.point.y + 40) {
+    camera.position.y = hit.point.y + 40;
+  }
+}
+
+/* ================= INTRO FLYTHROUGH ================= */
+const $ = (s) => document.querySelector(s);
+let introDone = false, introStart = 0;
+const CHANGI_P = toLocal(103.9865, 1.3644);
+const CBD_P = toLocal(103.8500, 1.2825);
+
+const INTRO = [
+  { t: 0, dur: 7000,
+    from: { p: [0, 17000, 26000], l: [1500, 0, 2000] },
+    to:   { p: [3000, 9500, 16000], l: [2500, 0, 3500] },
+    enter() { $("#title").classList.add("in");
+      chapter(""); } },
+  { t: 7000, dur: 9000,
+    from: { p: [3000, 9500, 16000], l: [2500, 0, 3500] },
+    to:   { p: [CHANGI_P.x - 1500, 950, CHANGI_P.z + 1900], l: [CHANGI_P.x, 80, CHANGI_P.z] },
+    enter() {
+      $("#title").classList.remove("in");
+      chapter('Chapter · <b>Energy Efficiency</b>');
+      setTimeout(() => { ignite(byKey.changi); showTuneCard(); }, 2600);
+    } },
+  { t: 16000, dur: 8000,
+    from: { p: [CHANGI_P.x - 1500, 950, CHANGI_P.z + 1900], l: [CHANGI_P.x, 80, CHANGI_P.z] },
+    to:   { p: [CBD_P.x - 900, 1500, CBD_P.z + 2600], l: [CBD_P.x, 150, CBD_P.z] },
+    enter() {
+      hideTuneCard();
+      chapter('Chapter · <b>Energy Management</b>');
+      let i = 0;
+      for (const k of ["dbs", "ocbc", "ngs", "frasers", "with", "psa", "mse", "hdb", "stengg", "htx"])
+        setTimeout(() => ignite(byKey[k]), 2200 + (i++) * 420);
+    } },
+  { t: 24000, dur: 8000,
+    from: { p: [CBD_P.x - 900, 1500, CBD_P.z + 2600], l: [CBD_P.x, 150, CBD_P.z] },
+    to:   { p: [1500, 15000, 22000], l: [2000, 0, 1000] },
+    enter() {
+      chapter('Chapter · <b>Intelligent Operations · FDD</b>');
+      let i = 0;
+      for (const b of beacons) if (b.site.tier === "mock")
+        setTimeout(() => ignite(b, 300), 1200 + (i++) * 140);
+    } },
+];
+
+function chapter(html) {
+  const el = $("#chapter");
+  if (!html) { el.classList.remove("in"); return; }
+  el.innerHTML = html; el.classList.add("in");
+}
+
+const smooth = (p) => p * p * (3 - 2 * p);
+let introSeg = -1;
+function runIntro(now) {
+  const ms = now - introStart;
+  let seg = INTRO.length - 1;
+  for (let i = INTRO.length - 1; i >= 0; i--) if (ms >= INTRO[i].t) { seg = i; break; }
+  if (seg !== introSeg) { introSeg = seg; INTRO[seg].enter?.(); }
+  const S = INTRO[seg];
+  const p = smooth(Math.max(0, Math.min(1, (ms - S.t) / S.dur)));
+  const lerp3 = (a, b) => new THREE.Vector3(
+    a[0] + (b[0] - a[0]) * p, a[1] + (b[1] - a[1]) * p, a[2] + (b[2] - a[2]) * p);
+  camera.position.copy(lerp3(S.from.p, S.to.p));
+  camera.lookAt(lerp3(S.from.l, S.to.l));
+  if (ms >= INTRO[INTRO.length - 1].t + INTRO[INTRO.length - 1].dur) endIntro();
+}
+function startIntro() { introStart = performance.now(); }
+function skipIntro() {
+  for (const b of beacons) ignite(b, 0);
+  hideTuneCard();
+  endIntro();
+  resetView();
+}
+function endIntro() {
+  if (introDone) return;
+  introDone = true;
+  controlsEnabled = true;
+  $("#title").classList.remove("in");
+  $("#skip").classList.add("hidden");
+  $("#hint").classList.add("in");
+  chapter('<b>Explore</b> · click any beacon');
+  // adopt current camera orientation into yaw/pitch
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+  yaw = e.y; pitch = e.x;
+  startFDD();
+}
+$("#skip").onclick = skipIntro;
+
+/* Changi tuning card during intro */
+let tuneEl = null, tuneSeed = Array.from({ length: 90 }, () => Math.random() * 2 - 1);
+let tuneT0 = 0;
+function showTuneCard() {
+  tuneEl = makeCard("CHANGI AIRPORT · TERMINALS", [
+    ["sense", "<b>Sensing</b> — flights · passengers · weather"],
+    ["predict", "<b>Predicting</b> — cooling demand ahead"],
+    ["act", "<b>Acting</b> — setpoints retuned live"],
+  ], "tune");
+  tuneT0 = performance.now();
+  requestAnimationFrame(() => tuneEl.classList.add("in"));
+}
+function hideTuneCard() { if (tuneEl) { tuneEl.remove(); tuneEl = null; } }
+function updateTuneCard(now) {
+  if (!tuneEl) return;
+  const t = now - tuneT0;
+  const lines = tuneEl.querySelectorAll(".ln");
+  [0, 1400, 2800].forEach((at, i) => lines[i].classList.toggle("show", t >= at));
+  const cv = tuneEl.querySelector("canvas");
+  cv.classList.toggle("show", t >= 3800);
+  if (t >= 3800) {
+    const c = cv.getContext("2d");
+    c.clearRect(0, 0, cv.width, cv.height);
+    const settle = Math.max(0, Math.min(1, (t - 3800) / 5000));
+    c.beginPath();
+    for (let i = 0; i < 90; i++) {
+      const x = (i / 89) * cv.width;
+      const drift = Math.sin(i / 8 + now / 900) * 4;
+      const noise = tuneSeed[i] * 11 * (1 - settle * Math.min(1, i / 60));
+      const y = cv.height * 0.55 + drift + noise;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.strokeStyle = settle > 0.6 ? "#4dffa6" : "#ffb84d";
+    c.lineWidth = 1.6; c.stroke();
+  }
+  pinCard(tuneEl, CHANGI_P.clone().add(new THREE.Vector3(0, 480, 0)));
+}
+
+/* ================= FDD ROAMING EVENTS ================= */
+let faultCard = null, faultAnchor = null, faultBeacon = null, faultT0 = 0, faultIdx = 0;
+function startFDD() { setTimeout(spawnFault, 9000); }
+function spawnFault() {
+  const f = FAULTS[faultIdx++ % FAULTS.length];
+  const b = byKey[f.key];
+  if (!b || !b.lit) { setTimeout(spawnFault, 5000); return; }
+  faultBeacon = b;
+  b.core.material.color.setHex(COLORS.red);
+  b.shell.material.color.setHex(COLORS.red);
+  faultCard = makeCard(b.site.org, [
+    ["detect", `<b>Fault detected</b> — ${f.detect}`],
+    ["diag", `<b>Diagnosed</b> — ${f.cause}`],
+    ["dispatch", "<b>Work order dispatched</b>"],
+    ["done", "<b>Resolved</b> — performance restored"],
+  ], "fault");
+  faultT0 = performance.now();
+  faultAnchor = b.group.position.clone().add(new THREE.Vector3(0, 320, 0));
+  requestAnimationFrame(() => faultCard.classList.add("in"));
+}
+function updateFDD(now) {
+  if (!faultCard) return;
+  const t = now - faultT0;
+  const lines = faultCard.querySelectorAll(".ln");
+  [0, 2400, 4800, 7200].forEach((at, i) => lines[i].classList.toggle("show", t >= at));
+  if (t >= 7200) {
+    faultCard.classList.add("resolved");
+    faultBeacon.core.material.color.setHex(faultBeacon.baseColor);
+    faultBeacon.shell.material.color.setHex(faultBeacon.baseColor);
+  }
+  if (t >= 11000) {
+    faultCard.remove(); faultCard = null; faultBeacon = null;
+    setTimeout(spawnFault, 14000);
+  } else {
+    pinCard(faultCard, faultAnchor);
+  }
+}
+
+/* ================= MAIN LOOP ================= */
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, clock.getDelta());
+  const now = performance.now();
+
+  if (tilesReady && !introDone) runIntro(now);
+
+  if (controlsEnabled) {
+    const fwd = new THREE.Vector3();
+    camera.getWorldDirection(fwd);
+    const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
+    const v = speed * dt;
+    if (keys.has("KeyW")) camera.position.addScaledVector(fwd, v);
+    if (keys.has("KeyS")) camera.position.addScaledVector(fwd, -v);
+    if (keys.has("KeyD")) camera.position.addScaledVector(right, v);
+    if (keys.has("KeyA")) camera.position.addScaledVector(right, -v);
+    if (keys.has("KeyE")) camera.position.y += v;
+    if (keys.has("KeyQ")) camera.position.y -= v;
+    if (keys.size) flyTarget = null;
+
+    if (flyTarget) {
+      camera.position.lerp(flyTarget, 1 - Math.exp(-dt * 2.2));
+      if (focus) {
+        const m = new THREE.Matrix4().lookAt(camera.position,
+          focus.group.position.clone().add(new THREE.Vector3(0, 200, 0)), camera.up);
+        const q = new THREE.Quaternion().setFromRotationMatrix(m);
+        camera.quaternion.slerp(q, 1 - Math.exp(-dt * 3));
+        const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+        yaw = e.y; pitch = e.x;
+      }
+      if (camera.position.distanceTo(flyTarget) < 12) flyTarget = null;
+    }
+    altitudeGuard(now);
+  }
+
+  // beacon pulse
+  for (const b of beacons) {
+    if (!b.lit) continue;
+    b.pulse += dt * (b === focus ? 6 : 2.1);
+    const s = 0.72 + 0.28 * Math.sin(b.pulse);
+    b.core.material.opacity = 0.55 + 0.4 * s;
+    b.shell.material.opacity = 0.10 + 0.13 * s;
+  }
+
+  if (assetCard && assetCardAnchor) pinCard(assetCard, assetCardAnchor);
+  updateTuneCard(now);
+  updateFDD(now);
+
+  camera.updateMatrixWorld();
+  tiles.setResolutionFromRenderer(camera, renderer);
+  tiles.update();
+  renderer.render(scene, camera);
+  window.__dbg = { tilesReady, introDone, cam: camera.position.toArray().map(Math.round) };
+}
+frame();
+</script>
+</body>
+</html>
