@@ -190,9 +190,11 @@ const CBD = [103.8500, 1.2825];
 /* All narrative is text — no numeric stats anywhere. */
 const CAPS = {
   city:    'Every building on this island consumes energy — <em>most of it for cooling</em>.',
-  changi1: 'At <b>Changi Airport</b>, our AI retunes the cooling plant <em>in real time</em> —',
+  changi1: '<b>EE</b> — at <b>Changi Airport</b>, our AI retunes the cooling plant <em>in real time</em> —',
   changi2: '— sensing every arriving flight, every surge of passengers, every shift in the weather.',
-  assets:  'Banks. Ports. Ministries. Galleries. Housing. <em>One by one, assets come online.</em>',
+  ioc1:    '<b>IoC</b> — in the Intelligent Operations Centre, every chiller, pump and AHU is watched. <em>Faults surface before anyone feels them.</em>',
+  ioc2:    'A failing chiller valve at <b>Marina Bay</b> — detected, diagnosed, <em>resolved remotely</em>.',
+  em:      '<b>EM</b> — energy monitoring across the whole island: every asset, every signal, <em>one live picture of Singapore</em>.',
   fabric:  'Together they run as one — <em>sense, predict, decide, act</em> — across the whole city.',
 };
 
@@ -332,7 +334,11 @@ function setupLayers() {
       "line-dasharray": [0, 4, 3] } }, "site-pulse");
 }
 
-function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150) {
+function retoneTag(tag, tone) { // e.g. FDD fault (amber) → resolved (cyan)
+  litFeatures.forEach((f) => { if (f.properties.tag === tag) f.properties.tone = tone; });
+  map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: litFeatures });
+}
+function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "") {
   try {
     const p = map.project(lngLat);
     const feats = map.queryRenderedFeatures(
@@ -361,7 +367,7 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150) {
       litSeen.add(key);
       const pr = f.properties || {};
       litFeatures.push({ type: "Feature", properties: {
-          tone,
+          tone, tag,
           h: Math.min(320, (pr.render_height ?? pr.height ?? 8)) + 1.5,
           b: pr.render_min_height ?? pr.min_height ?? 0,
         }, geometry: { type: "MultiPolygon", coordinates: kept } });
@@ -468,7 +474,7 @@ const PHASES = [
         lightBuildingsAt(CHANGI_TERMINALS, "amber", 260, 700);
         $("#bloom-changi").classList.add("on");
         igniteSite(0);
-        loctag("Changi Airport · Terminal Three");
+        loctag("EE · Changi Airport · HVAC Optimization");
       }
       if (ms > 5600 && !this._orbit) {
         this._orbit = true;
@@ -488,29 +494,37 @@ const PHASES = [
       map.flyTo({ center: CBD, zoom: 15.0, pitch: 60, bearing: -35,
         duration: dur(4800), curve: 1.4, easing: easeInOutCubic });
       caption("");
-      this._lit = false; this._orbit = false; this._c = false;
+      this._lit = false; this._orbit = false;
+      this._c1 = this._c2 = this._fixed = false;
     },
     update(ms, now) {
       if (ms > 5100 && !this._lit) { // after the fly-to has landed
         this._lit = true;
-        // real towers of the CBD clients light up cyan
-        for (const k of ["dbs", "ocbc", "ngs", "frasers", "with"]) {
+        // healthy towers cyan; DBS raises an FDD fault (amber) to be resolved live
+        for (const k of ["ocbc", "ngs", "frasers", "with"]) {
           const s = SITES.find((x) => x.key === k);
           lightBuildingsAt(s.coords, "cyan", 90, 140);
           igniteSite(s.id);
         }
+        const dbs = SITES.find((x) => x.key === "dbs");
+        lightBuildingsAt(dbs.coords, "amber", 90, 140, "fdd");
+        igniteSite(dbs.id);
         $("#bloom-cbd").classList.add("on");
-        loctag("Raffles Place · Marina Bay");
+        loctag("IoC · Fault Detection & Diagnostics");
       }
-      if (ms > 5300 && !this._c) { this._c = true; caption(CAPS.assets); }
+      if (ms > 5300 && !this._c1) { this._c1 = true; caption(CAPS.ioc1); }
       if (ms > 5600 && !this._orbit) {
         this._orbit = true;
         map.easeTo({ bearing: 25, duration: dur(8800), easing: (t) => t });
       }
+      if (ms > 9200 && !this._c2) { this._c2 = true; caption(CAPS.ioc2); }
+      if (ms > 12200 && !this._fixed) { this._fixed = true; retoneTag("fdd", "cyan"); }
       if (ms > 13600) { captionOut(); loctag(""); }
       pinBloom($("#bloom-cbd"), CBD);
     },
-    exit() { captionOut(); loctag(""); $("#bloom-cbd").classList.remove("on"); } },
+    exit() { this._c1 = this._c2 = this._fixed = false;
+      retoneTag("fdd", "cyan");
+      captionOut(); loctag(""); $("#bloom-cbd").classList.remove("on"); } },
 
   { name: "island", dur: 17000,
     enter() {
@@ -519,7 +533,7 @@ const PHASES = [
       map.flyTo({ center: [103.8520, 1.3180], zoom: 11.35, pitch: 50, bearing: -8,
         duration: dur(4200), curve: 1.35, easing: easeInOutCubic });
       caption("");
-      this._c = false; this._orbit = false;
+      this._c1 = this._c2 = false; this._orbit = false;
       arcProgress = ARCS.map(() => 0);
       map.setPaintProperty("arc-flow", "line-opacity", 0);
       this._flow = false;
@@ -528,7 +542,9 @@ const PHASES = [
       // hero clients ignite one by one, then the mock portfolio sweeps the island
       SITES.forEach((s, i) => { if (i > 0 && ms > 2600 + i * 520) igniteSite(s.id); });
       MOCK_SITES.forEach((m, i) => { if (ms > 6400 + i * 160) igniteSite(m.id); });
-      if (ms > 4400 && !this._c) { this._c = true; caption(CAPS.fabric); }
+      if (ms > 4400 && !this._c1) { this._c1 = true; caption(CAPS.em);
+        loctag("EM · Island-wide Energy Monitoring"); }
+      if (ms > 10600 && !this._c2) { this._c2 = true; caption(CAPS.fabric); loctag(""); }
       if (ms > 5400 && !this._orbit) {
         this._orbit = true;
         map.easeTo({ bearing: 10, duration: dur(9200), easing: (t) => t });
