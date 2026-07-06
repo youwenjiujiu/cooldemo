@@ -476,6 +476,39 @@ const MESH_EDGES = (() => {
 })();
 const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(ALL_SITES[a].coords, ALL_SITES[b].coords));
 
+// synthetic skyline for the island view: real building tiles only exist from
+// z13 up, so when the camera pulls out each asset lights a small cluster of
+// stylized glowing towers instead of a bare dot (the layer is capped at z13.2,
+// where the real lit footprints take over)
+const SYN = (() => {
+  const feats = [];
+  const rnd = (i, n) => { const x = Math.sin(i * 12.9898 + n * 78.233) * 43758.5453;
+    return x - Math.floor(x); };
+  ALL_SITES.forEach((s) => {
+    const hero = s.tier === "hero";
+    const k = hero ? 3 : 2;
+    for (let n = 0; n < k; n++) {
+      // island-view scale: at z≈11 one pixel is ~38 m, so the towers are
+      // deliberately exaggerated or they'd vanish into the basemap
+      const ox = (rnd(s.id, n * 3) - 0.5) * 900 / 110574;
+      const oy = (rnd(s.id, n * 3 + 1) - 0.5) * 900 / 110574;
+      const half = (130 + rnd(s.id, n * 3 + 2) * 110) / 110574;
+      const h = (hero ? 950 : 550) + rnd(s.id, n * 7 + 3) * (hero ? 750 : 450);
+      const cx = s.coords[0] + ox, cy = s.coords[1] + oy;
+      feats.push({ type: "Feature", properties: { site: s.id, h, tone: "cyan" },
+        geometry: { type: "Polygon", coordinates: [[
+          [cx - half, cy - half], [cx + half, cy - half], [cx + half, cy + half],
+          [cx - half, cy + half], [cx - half, cy - half]]] } });
+    }
+  });
+  return feats;
+})();
+const synOn = new Set();
+function synSet() {
+  map.getSource("syn-bld")?.setData({ type: "FeatureCollection",
+    features: SYN.filter((f) => synOn.has(f.properties.site)) });
+}
+
 /* --- real 3D buildings; lit state via feature-state ("amber" | "cyan") --- */
 let litFeatures = [], litSeen = new Set();
 function setupLayers() {
@@ -569,6 +602,23 @@ function setupLayers() {
   if (USE_MAPBOX) glassLayer.paint["fill-extrusion-emissive-strength"] = 0.9;
   map.addLayer(glassLayer, firstSymbol);
 
+  // stylized island-view towers (see SYN above) — hidden once real tiles exist
+  map.addSource("syn-bld", { type: "geojson",
+    data: { type: "FeatureCollection", features: [] } });
+  const synLayer = {
+    id: "syn-bld-3d", type: "fill-extrusion", source: "syn-bld", maxzoom: 13.2,
+    paint: {
+      "fill-extrusion-color": ["match", ["get", "tone"],
+        "amber", "#f0a832", "#49ffef"],
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 1,
+      "fill-extrusion-vertical-gradient": false,
+    },
+  };
+  if (USE_MAPBOX) synLayer.paint["fill-extrusion-emissive-strength"] = 1.1;
+  map.addLayer(synLayer, firstSymbol);
+
   map.addSource("sites", { type: "geojson", data: {
     type: "FeatureCollection",
     features: ALL_SITES.map((s) => ({ type: "Feature", id: s.id,
@@ -592,8 +642,9 @@ function setupLayers() {
   map.addLayer({ id: "site-label", type: "symbol", source: "sites",
     layout: { "text-field": ["get", "label"],
       "text-size": ["case", isHero, 12, 10],
-      "text-variable-anchor": ["top", "bottom", "left", "right"],
-      "text-radial-offset": 1.0, "text-justify": "auto",
+      // fixed anchor: labels stay welded under their dot while the camera
+      // moves (variable anchors re-shuffle mid-flight and look drifty)
+      "text-anchor": "top", "text-offset": [0, 0.9],
       "text-font": BLD.font },
     paint: { "text-color": "#eaf6f8", "text-halo-color": "#05080d", "text-halo-width": 1.5,
       "text-opacity": ["case", onState, ["case", isHero, 0.95, 0.7], 0] } });
@@ -851,10 +902,15 @@ function spawnPop(coords, hero) {
     .onfinish = () => el.remove();
 }
 const FDD_SITE = MOCK_SITES.find((m) => m.org === "Tampines Regional Centre");
-const setFault = (id, on) => map.setFeatureState({ source: "sites", id }, { fault: on });
+const setFault = (id, on) => {
+  map.setFeatureState({ source: "sites", id }, { fault: on });
+  SYN.forEach((f) => { if (f.properties.site === id) f.properties.tone = on ? "amber" : "cyan"; });
+  synSet();
+};
 const igniteSite = (id) => {
   if (litSites.has(id)) return;
   litSites.add(id); setSiteOn(id, true); sitesOn = litSites.size;
+  synOn.add(id); synSet();
   const s = ALL_SITES[id];
   if (s) spawnPop(s.coords, s.tier === "hero");
 };
@@ -862,6 +918,7 @@ const allSitesOn = () => ALL_SITES.forEach((s) => igniteSite(s.id));
 const allSitesOff = () => {
   ALL_SITES.forEach((s) => setSiteOn(s.id, false));
   litSites.clear(); sitesOn = 0;
+  synOn.clear(); synSet();
 };
 
 function pinBloom(el, lngLat) {
