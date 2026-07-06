@@ -597,14 +597,12 @@ const SYN = (() => {
             rot(-halfX, -halfY), rot(halfX, -halfY), rot(halfX, halfY),
             rot(-halfX, halfY), rot(-halfX, -halfY)]] } });
       };
-      // setback silhouette: podium → tower → crown, then a glowing cap and
-      // (sometimes) a needle spire — reads as a skyscraper, not a slab
+      // setback silhouette: podium → tower → crown, topped by a flush glowing
+      // cap — clean skyscraper massing, no antenna clutter
       box(half, half, 0, h * 0.42, "body");
       box(half * 0.74, half * 0.74, h * 0.40, h * 0.78, "body");
       box(half * 0.52, half * 0.52, h * 0.76, h, "body");
-      box(half * 0.56, half * 0.56, h, h + 55, "cap");
-      if (rnd(s.id, n * 11 + 4) > 0.45)
-        box(half * 0.1, half * 0.1, h, h + 340 + rnd(s.id, n * 13 + 6) * 200, "cap");
+      box(half * 0.52, half * 0.52, h, h + 45, "cap");
     }
   });
   return feats;
