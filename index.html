@@ -512,9 +512,12 @@ const SYN = (() => {
   const feats = [];
   const rnd = (i, n) => { const x = Math.sin(i * 12.9898 + n * 78.233) * 43758.5453;
     return x - Math.floor(x); };
+  // the CBD heroes sit a few hundred metres apart — one tower each, or their
+  // clusters melt into a single blob at island zoom
+  const CROWDED = new Set(["dbs", "ocbc", "ngs", "frasers", "with"]);
   ALL_SITES.forEach((s) => {
     const hero = s.tier === "hero";
-    const k = hero ? 3 : 2;
+    const k = CROWDED.has(s.key) ? 1 : hero ? 3 : 2;
     for (let n = 0; n < k; n++) {
       // island-view scale: at z≈11 one pixel is ~38 m, so the towers are
       // deliberately exaggerated or they'd vanish into the basemap; the first
@@ -524,10 +527,15 @@ const SYN = (() => {
       const half = (130 + rnd(s.id, n * 3 + 2) * 110) / 110574;
       const h = (hero ? 950 : 550) + rnd(s.id, n * 7 + 3) * (hero ? 750 : 450);
       const cx = s.coords[0] + ox, cy = s.coords[1] + oy;
+      // each tower gets its own bearing — a grid of identical axis-aligned
+      // boxes reads as pasted-on
+      const a = rnd(s.id, n * 5 + 9) * Math.PI / 2;
+      const rot = (dx, dy) => [cx + dx * Math.cos(a) - dy * Math.sin(a),
+        cy + dx * Math.sin(a) + dy * Math.cos(a)];
+      const ring = [rot(-half, -half), rot(half, -half), rot(half, half),
+        rot(-half, half), rot(-half, -half)];
       feats.push({ type: "Feature", properties: { site: s.id, h, tone: "cyan" },
-        geometry: { type: "Polygon", coordinates: [[
-          [cx - half, cy - half], [cx + half, cy - half], [cx + half, cy + half],
-          [cx - half, cy + half], [cx - half, cy - half]]] } });
+        geometry: { type: "Polygon", coordinates: [ring] } });
     }
   });
   return feats;
@@ -657,16 +665,22 @@ function setupLayers() {
   const onState = ["boolean", ["feature-state", "on"], false];
   const faultState = ["boolean", ["feature-state", "fault"], false];
   const isHero = ["==", ["get", "tier"], "hero"];
-  map.addLayer({ id: "site-pulse", type: "circle", source: "sites",
+  // both dot layers cut off below z13.2 — exactly where the stylized island
+  // towers appear, so an asset is EITHER a tower (far) or a dot (close),
+  // never both stacked on the same spot
+  map.addLayer({ id: "site-pulse", type: "circle", source: "sites", minzoom: 13.2,
     paint: { "circle-radius": 0,
       "circle-color": ["case", faultState, "#ffb84d", "#38e1d6"],
       "circle-opacity": 0, "circle-blur": 0.6, "circle-pitch-alignment": "map" } });
-  map.addLayer({ id: "site-core", type: "circle", source: "sites",
+  map.addLayer({ id: "site-core", type: "circle", source: "sites", minzoom: 13.2,
     paint: {
       "circle-radius": ["case", faultState, 10, ["case", onState, ["case", isHero, 7.5, 5.5], 0]],
       "circle-color": ["case", faultState, "#ffb84d", ["case", isHero, "#45ffef", "#38e1d6"]],
-      "circle-stroke-color": "#ffffff", "circle-stroke-width": ["case", onState, ["case", isHero, 2, 1.2], 0],
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"],
+        11, ["case", onState, 1, 0], 14, ["case", onState, ["case", isHero, 2, 1.2], 0]],
       "circle-opacity": ["case", onState, 1, 0],
+      "circle-pitch-alignment": "map",
     } });
   const labelLayout = { "text-field": ["get", "label"],
     "text-size": ["case", isHero, 12, 10],
