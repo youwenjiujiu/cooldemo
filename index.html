@@ -143,6 +143,12 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
   animation: coin-spin 2.8s cubic-bezier(.5, 0, .3, 1) infinite; }
 @keyframes coin-spin { 0% { transform: rotateY(0); } 55%, 100% { transform: rotateY(360deg); } }
 
+/* headline figures on live outcome cards */
+#panel-outcome li .stat { font-size: 23px; font-weight: 800; line-height: 1.15;
+  margin: 3px 0 1px; color: #ffd88f; letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 20px rgba(255, 184, 77, .5); }
+
 /* trust line at the foot of the OUTCOME panel — why the client should believe */
 #panel-outcome .s-proof { margin-top: 12px; padding-top: 9px; font-size: 10.5px;
   line-height: 1.55; color: #ffd9a0; letter-spacing: .03em; font-style: italic;
@@ -377,7 +383,8 @@ const PANELS = {
       Environment: "weather & wet-bulb forecast",
     },
     outcome: {
-      "Energy bill 8–15% ↓": "AI retunes the plant every hour — savings audited, not estimated",
+      "Energy bill 8–15% ↓": { stat: "−13.2%",
+        sub: "2.1 GWh · S$680k this year — audited, not estimated" },
     },
     proof: "Guaranteed in the contract — M&V-audited (IPMVP). If it doesn't save, we don't get paid.",
   },
@@ -389,8 +396,10 @@ const PANELS = {
       Space: "tenant & floor submetering",
     },
     outcome: {
-      "Energy bill 8–15% ↓": "verified against every sub-meter, tenant by tenant",
-      "OPEX leaner ↓": "waste surfaces in hours — not in next year's audit",
+      "Energy bill 8–15% ↓": { stat: "S$4.2M",
+        sub: "verified savings this year, sub-meter by sub-meter" },
+      "OPEX leaner ↓": { stat: "1,240+",
+        sub: "anomalies surfaced & closed — in hours, not audits" },
     },
     proof: "Proven across airports, banks, ports and public estates. Waste has nowhere to hide.",
   },
@@ -402,9 +411,12 @@ const PANELS = {
       People: "comfort held while control shifts",
     },
     outcome: {
-      "Capex deferred ↓": "assets run gentler, live longer — replacement pushed out",
-      "OPEX leaner ↓": "FDD turns breakdowns into scheduled fixes",
-      "Space & NOI higher ↑": "comfort held, uptime proven — tenants stay and pay",
+      "Capex deferred ↓": { stat: "S$18M",
+        sub: "replacement pushed out five-plus years — assets run gentler" },
+      "OPEX leaner ↓": { stat: "−38%",
+        sub: "reactive callouts — FDD turns breakdowns into scheduled fixes" },
+      "Space & NOI higher ↑": { stat: "+2.4%",
+        sub: "NOI uplift — comfort held, uptime proven, tenants stay" },
     },
     proof: "Faults fixed before tenants feel them. That is control — not another dashboard.",
   },
@@ -454,11 +466,30 @@ function showPanels(key) {
   const oEl = $("#panel-outcome");
   oEl.querySelector(".s-mod").textContent = p.mod;
   oEl.querySelector("ul").innerHTML = OUTCOME_ITEMS.map((t, i) => {
-    const sub = p.outcome[t];
-    return `<li class="${sub ? "" : "dim"}" style="transition-delay:${200 + i * 110}ms">
-      <div><div class="t">${t}</div>${sub ? `<small>${sub}</small>` : ""}</div></li>`;
+    const o = p.outcome[t];
+    return `<li class="${o ? "" : "dim"}" style="transition-delay:${200 + i * 110}ms">
+      <div><div class="t">${t}</div>${o ?
+        `<div class="stat" data-n="${o.stat}"></div><small>${o.sub}</small>` : ""}</div></li>`;
   }).join("");
   oEl.querySelector(".s-proof").innerHTML = p.proof ? `◆ ${p.proof}` : "";
+  // the headline figures count up from zero — numbers that MOVE get believed
+  oEl.querySelectorAll(".stat[data-n]").forEach((el) => {
+    const raw = el.dataset.n;
+    const m = raw.match(/([\d,]+(?:\.\d+)?)/);
+    if (!m) { el.textContent = raw; return; }
+    const target = parseFloat(m[1].replace(/,/g, ""));
+    const dec = (m[1].split(".")[1] || "").length;
+    const grouped = m[1].includes(",");
+    const t0 = performance.now(), wait = 500, len = 1500;
+    (function tick(now) {
+      const q = clamp((now - t0 - wait) / len, 0, 1);
+      const v = target * (1 - Math.pow(1 - q, 3));
+      el.textContent = raw.replace(m[1], grouped
+        ? Math.round(v).toLocaleString("en-US")
+        : v.toFixed(dec));
+      if (q < 1 && el.isConnected) requestAnimationFrame(tick);
+    })(t0);
+  });
   [dEl, oEl].forEach((el) => {
     el.classList.remove("in");
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("in")));
