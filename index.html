@@ -362,7 +362,13 @@ const ARCS = MESH_EDGES.map(([a, b]) => arcCoords(ALL_SITES[a].coords, ALL_SITES
 /* --- real 3D buildings; lit state via feature-state ("amber" | "cyan") --- */
 let litFeatures = [], litSeen = new Set();
 function setupLayers() {
-  const firstSymbol = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
+  // insert extrusions after the LAST non-symbol layer: every road/traffic line
+  // renders under the buildings; only text labels stay on top
+  const layers = map.getStyle().layers;
+  let firstSymbol;
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (layers[i].type !== "symbol") { firstSymbol = layers[i + 1]?.id; break; }
+  }
   const bldLayer = {
     id: "bld-3d", type: "fill-extrusion", source: BLD.source, "source-layer": BLD.layer,
     minzoom: BLD.minzoom,
