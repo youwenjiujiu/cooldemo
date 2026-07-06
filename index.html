@@ -208,6 +208,30 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 #bloom-cbd { width: 520px; height: 520px;
   background: radial-gradient(circle, rgba(0,255,240,.22) 0%, rgba(56,225,214,.08) 42%, transparent 70%); }
 
+/* explore mode: grab the map any time — the tour pauses, assets are clickable */
+#resume { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
+  background: rgba(255, 184, 77, .1); color: var(--amber); border: 1px solid rgba(255, 184, 77, .5);
+  border-radius: 26px; padding: 11px 30px; font-size: 13px; letter-spacing: .18em; cursor: pointer;
+  font-family: inherit; text-transform: uppercase; z-index: 21; opacity: 0; pointer-events: none;
+  transition: opacity .5s ease, background .3s; }
+#resume.in { opacity: 1; pointer-events: auto; }
+#resume:hover { background: rgba(255, 184, 77, .22); }
+#sitecard { position: absolute; left: 50%; bottom: 96px; transform: translate(-50%, 12px);
+  min-width: 260px; max-width: 420px; padding: 14px 20px; z-index: 20; pointer-events: none;
+  background: linear-gradient(165deg, rgba(12, 22, 34, .92), rgba(7, 13, 21, .8));
+  border: 1px solid rgba(86, 225, 230, .35); backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  box-shadow: 0 0 30px rgba(56, 225, 214, .18);
+  opacity: 0; transition: opacity .45s ease, transform .45s cubic-bezier(.16,1,.3,1); }
+#sitecard.in { opacity: 1; transform: translate(-50%, 0); }
+#sitecard h4 { margin: 0 0 4px; font-size: 15px; color: #fff; letter-spacing: .05em; }
+#sitecard h4::before { content: "◉ "; color: var(--cyan); }
+#sitecard .sc-sub { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--cyan); margin-bottom: 6px; }
+#sitecard .sc-live { font-size: 11px; color: var(--muted); line-height: 1.5; }
+#sitecard .sc-live b { color: #ffe9c4; font-weight: 600; }
+
 /* controls */
 #replay { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
   background: rgba(56,225,214,.08); color: var(--cyan); border: 1px solid rgba(56,225,214,.45);
@@ -253,6 +277,8 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 <div id="loctag"></div>
 <div id="caption"><div class="line" id="cap-line"></div></div>
 
+<div id="sitecard"></div>
+<button id="resume">▶ Resume tour</button>
 <button id="replay">Replay</button>
 <button id="skip">Skip ▸▸</button>
 
@@ -1185,18 +1211,71 @@ function jumpTo(idx) {
   popsEnabled = true;
 }
 $replay.onclick = () => jumpTo(0);
-$("#skip").onclick = () => jumpTo(cur + 1);
+$("#skip").onclick = () => { if (exploring) resumeTour(); jumpTo(cur + 1); };
+
+/* --- explore mode: grab the map and the tour pauses; assets are clickable --- */
+let exploring = false;
+function enterExplore() {
+  if (exploring) return;
+  exploring = true;
+  map.stop(); // stop the scripted camera so it doesn't fight the user's hand
+  captionOut(); loctag("");
+  $replay.classList.remove("in");
+  $("#resume").classList.add("in");
+}
+function resumeTour() {
+  if (!exploring) return;
+  exploring = false;
+  $("#resume").classList.remove("in");
+  $("#sitecard").classList.remove("in");
+  jumpTo(cur); // rebuild the phase from a clean, correct world state
+}
+$("#resume").onclick = resumeTour;
+
+function wireExplore() {
+  ["mousedown", "wheel", "touchstart"].forEach((ev) =>
+    map.getCanvas().addEventListener(ev, enterExplore, { passive: true }));
+  const openSite = (id) => {
+    const s = ALL_SITES[id];
+    if (!s) return;
+    enterExplore();
+    igniteSite(id);
+    $("#sitecard").innerHTML = `<h4>${s.org}</h4>
+      <div class="sc-sub">${s.tier === "hero" ? "client asset · online" : "portfolio asset · online"}</div>
+      <div class="sc-live"><b>LIVE</b> — energy, assets, people, space, environment
+        streaming into the AIP ontology.</div>`;
+    $("#sitecard").classList.add("in");
+    map.flyTo({ center: s.coords, zoom: 15.4, pitch: 60, bearing: -20,
+      duration: 2600, curve: 1.4, easing: easeInOutCubic });
+    map.once("moveend", () => {
+      if (exploring) lightBuildingsAt(s.coords, "cyan", 90, 140);
+    });
+  };
+  ["site-core", "site-label", "syn-bld-3d"].forEach((layer) => {
+    map.on("click", layer, (e) => {
+      const f = e.features && e.features[0];
+      if (!f) return;
+      openSite(f.properties.site ?? f.id);
+    });
+    map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
+  });
+}
 
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = clamp(now - last, 0, 100); // first RAF timestamp can precede `last`
   last = now;
-  playT = Math.max(0, playT + dt);
-  let idx = 0;
-  for (let i = PHASES.length - 1; i >= 0; i--) if (playT >= PHASES[i].start) { idx = i; break; }
-  if (idx !== cur) { if (cur >= 0) PHASES[cur].exit(); cur = idx; PHASES[cur].enter(); }
-  const ph = PHASES[cur];
-  ph.update(playT - ph.start, now);
+  if (!exploring) {
+    playT = Math.max(0, playT + dt);
+    let idx = 0;
+    for (let i = PHASES.length - 1; i >= 0; i--) if (playT >= PHASES[i].start) { idx = i; break; }
+    if (idx !== cur) { if (cur >= 0) PHASES[cur].exit(); cur = idx; PHASES[cur].enter(); }
+    const ph = PHASES[cur];
+    ph.update(playT - ph.start, now);
+  } else if (arcProgress.some((p) => p > 0)) {
+    tickComet(now); // the world stays alive under the user's hand
+  }
 
   // pulsing rings on lit sites
   if (map.getLayer("site-pulse") && sitesOn > 0) {
@@ -1205,11 +1284,12 @@ function frame(now) {
     map.setPaintProperty("site-pulse", "circle-radius", ["case", on, 9 + phse * 26, 0]);
     map.setPaintProperty("site-pulse", "circle-opacity", ["case", on, 0.75 * (1 - phse), 0]);
   }
-  window.__dbg = { playT: Math.round(playT), cur, phase: ph.name, dt: Math.round(dt) };
+  window.__dbg = { playT: Math.round(playT), cur, phase: PHASES[cur].name, dt: Math.round(dt), exploring };
 }
 
 map.on("load", () => {
   setupLayers();
+  wireExplore();
   jumpTo(0);
   requestAnimationFrame(frame);
 });
