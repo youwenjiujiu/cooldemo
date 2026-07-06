@@ -538,6 +538,37 @@ function setupLayers() {
   if (USE_MAPBOX) litLayer.paint["fill-extrusion-emissive-strength"] = 1.1;
   map.addLayer(litLayer, firstSymbol);
 
+  // x-ray close-up: glowing floor plates inside a translucent glass shell,
+  // so the hero tower reads as a see-through facility, not a solid block
+  map.addSource("xray", { type: "geojson",
+    data: { type: "FeatureCollection", features: [] } });
+  const floorLayer = {
+    id: "xray-floors", type: "fill-extrusion", source: "xray",
+    filter: ["==", ["get", "kind"], "plate"],
+    paint: {
+      "fill-extrusion-color": "#ffc46b",
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": ["get", "b"],
+      "fill-extrusion-opacity": 1,
+      "fill-extrusion-vertical-gradient": false,
+    },
+  };
+  if (USE_MAPBOX) floorLayer.paint["fill-extrusion-emissive-strength"] = 1.2;
+  map.addLayer(floorLayer, firstSymbol);
+  const glassLayer = {
+    id: "xray-glass", type: "fill-extrusion", source: "xray",
+    filter: ["==", ["get", "kind"], "glass"],
+    paint: {
+      "fill-extrusion-color": "#f7b04a",
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": ["get", "b"],
+      "fill-extrusion-opacity": 0.26, // translucent — the floors show through
+      "fill-extrusion-vertical-gradient": false,
+    },
+  };
+  if (USE_MAPBOX) glassLayer.paint["fill-extrusion-emissive-strength"] = 0.9;
+  map.addLayer(glassLayer, firstSymbol);
+
   map.addSource("sites", { type: "geojson", data: {
     type: "FeatureCollection",
     features: ALL_SITES.map((s) => ({ type: "Feature", id: s.id,
@@ -586,6 +617,40 @@ function retoneTag(tag, tone) { // e.g. FDD fault (amber) → resolved (cyan)
   litFeatures.forEach((f) => { if (f.properties.tag === tag) f.properties.tone = tone; });
   map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: litFeatures });
 }
+// buffer a footprint ring N meters outward along its edge normals: a shell
+// must clear the base facade by whole meters on EVERY wall (centroid scaling
+// fails on long slabs and concave footprints) or its side faces lose the
+// depth test to the base building and only the roof reads as lit
+function bufferPoly(poly, meters) {
+  const PAD = meters / 110574; // Singapore ≈ equator, lng ≈ lat
+  return poly.map((ring) => {
+    const pts = ring.slice(0, -1); // drop the closing duplicate
+    const n = pts.length;
+    if (n < 3) return ring;
+    let area = 0;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % n];
+      area += x1 * y2 - x2 * y1;
+    }
+    const sgn = area > 0 ? 1 : -1; // outward normal flips with winding
+    const out = pts.map((p, i) => {
+      const prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
+      const norm = (a, b) => {
+        const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+        return [sgn * dy / l, -sgn * dx / l];
+      };
+      const [ax, ay] = norm(prev, p), [bx, by] = norm(p, next);
+      let mx = ax + bx, my = ay + by;
+      const ml = Math.hypot(mx, my);
+      if (ml < 0.35) { mx = ax; my = ay; } // near-reversal: fall back to one edge
+      else { mx /= ml; my /= ml; }
+      const scale = Math.min(2.5, 2 / Math.max(0.8, ml)); // miter, clamped
+      return [p[0] + mx * PAD * scale, p[1] + my * PAD * scale];
+    });
+    out.push(out[0]);
+    return out;
+  });
+}
 function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "") {
   try {
     const p = map.project(lngLat);
@@ -595,38 +660,7 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "
     const degLng = maxMeters / 111320;
     const near = (ring) => ring.some(([x, y]) =>
       Math.abs(x - lngLat[0]) < degLng && Math.abs(y - lngLat[1]) < degLat);
-    // buffer each ring ~10m outward along its edge normals: the glow shell
-    // must clear the base facade by whole meters on EVERY wall (centroid
-    // scaling fails on long slabs and concave footprints) or its side faces
-    // lose the depth test to the base building and only the roof reads lit
-    const PAD = 10 / 110574; // ~10 m in degrees (Singapore ≈ equator, lng ≈ lat)
-    const inflate = (poly) => poly.map((ring) => {
-      const pts = ring.slice(0, -1); // drop the closing duplicate
-      const n = pts.length;
-      if (n < 3) return ring;
-      let area = 0;
-      for (let i = 0; i < n; i++) {
-        const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % n];
-        area += x1 * y2 - x2 * y1;
-      }
-      const sgn = area > 0 ? 1 : -1; // outward normal flips with winding
-      const out = pts.map((p, i) => {
-        const prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
-        const norm = (a, b) => {
-          const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
-          return [sgn * dy / l, -sgn * dx / l];
-        };
-        const [ax, ay] = norm(prev, p), [bx, by] = norm(p, next);
-        let mx = ax + bx, my = ay + by;
-        const ml = Math.hypot(mx, my);
-        if (ml < 0.35) { mx = ax; my = ay; } // near-reversal: fall back to one edge
-        else { mx /= ml; my /= ml; }
-        const scale = Math.min(2.5, 2 / Math.max(0.8, ml)); // miter, clamped
-        return [p[0] + mx * PAD * scale, p[1] + my * PAD * scale];
-      });
-      out.push(out[0]);
-      return out;
-    });
+    const inflate = (poly) => bufferPoly(poly, 10);
     // flatten to individual footprints, one candidate per polygon per slice
     // (tiles merge many footprints into one (Multi)Polygon, and tall towers
     // arrive as stacked min_height → height bands sharing one footprint)
@@ -676,6 +710,61 @@ function lightBuildingsAt(lngLat, tone, radiusPx = 110, maxMeters = 150, tag = "
 function unlightBuildings() {
   litFeatures = []; litSeen = new Set();
   map.getSource("lit-bld")?.setData({ type: "FeatureCollection", features: [] });
+}
+
+/* --- x-ray hero tower: glowing floor plates inside a translucent glass shell --- */
+let xrayPlates = [], xrayGlass = [], xrayShown = -1;
+function xrayBuildingAt(lngLat, radiusPx = 42, maxMeters = 70) {
+  try {
+    const p = map.project(lngLat);
+    const feats = map.queryRenderedFeatures(
+      [[p.x - radiusPx, p.y - radiusPx], [p.x + radiusPx, p.y + radiusPx]], { layers: ["bld-3d"] });
+    const degLat = maxMeters / 110574, degLng = maxMeters / 111320;
+    const near = (ring) => ring.some(([x, y]) =>
+      Math.abs(x - lngLat[0]) < degLng && Math.abs(y - lngLat[1]) < degLat);
+    // one entry per footprint (keyed on first vertex), keeping its full height
+    // across the stacked min_height → height slices
+    const tops = new Map();
+    feats.forEach((f) => {
+      const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates]
+        : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates : [];
+      const pr = f.properties || {};
+      const h0 = pr.render_height ?? pr.height ?? 8;
+      polys.forEach((poly) => {
+        if (!near(poly[0])) return;
+        const key = JSON.stringify(poly[0][0]);
+        const cur = tops.get(key);
+        if (!cur || h0 > cur.h) tops.set(key, { poly, h: h0 });
+      });
+    });
+    xrayPlates = []; xrayGlass = [];
+    tops.forEach(({ poly, h }) => {
+      const H = Math.min(320, h);
+      if (H < 20) return; // x-ray the towers, skip street furniture
+      const plate = bufferPoly(poly, 4);   // floors: outside the facade…
+      const glass = bufferPoly(poly, 13);  // …inside the glass
+      const FLOOR = 7; // one glowing deck every ~2 storeys reads best from afar
+      for (let z = 0; z + 2 < H; z += FLOOR)
+        xrayPlates.push({ type: "Feature", properties: { kind: "plate", b: z, h: z + 1.6 },
+          geometry: { type: "MultiPolygon", coordinates: [plate] } });
+      xrayGlass.push({ type: "Feature", properties: { kind: "glass", b: 0, h: H + 5 },
+        geometry: { type: "MultiPolygon", coordinates: [glass] } });
+    });
+    xrayPlates.sort((a, b) => a.properties.b - b.properties.b);
+    xrayShown = -1;
+    setXrayProgress(0);
+  } catch (e) { /* skyline still carries the shot */ }
+}
+function setXrayProgress(p) { // 0..1 — glass wraps on, floors sweep bottom-up
+  const n = Math.round(clamp(p, 0, 1) * xrayPlates.length);
+  if (n === xrayShown) return;
+  xrayShown = n;
+  map.getSource("xray")?.setData({ type: "FeatureCollection",
+    features: xrayGlass.concat(xrayPlates.slice(0, n)) });
+}
+function clearXray() {
+  xrayPlates = []; xrayGlass = []; xrayShown = -1;
+  map.getSource("xray")?.setData({ type: "FeatureCollection", features: [] });
 }
 
 /* --- arcs progressive reveal + flowing dash --- */
@@ -786,21 +875,24 @@ const PHASES = [
     update(ms, now) {
       if (ms > 5300 && !this._lit) { // after the fly-to has landed
         this._lit = true;
-        const script = () => lightBuildingsAt(DBS_TOWER, "amber", 42, 70);
+        // x-ray mode: translucent glass shell, glowing facility floors inside
+        const script = () => xrayBuildingAt(DBS_TOWER, 42, 70);
         script();
         // tiles may still be loading mid-fly: once fully loaded, requery so the
-        // glow shells pick up real heights instead of low-zoom placeholders
+        // shells pick up real heights instead of low-zoom placeholders
         map.once("idle", () => {
-          if (cur === 1 && this._lit) { unlightBuildings(); script(); }
+          if (cur === 1 && this._lit) script();
         });
         setTimeout(() => {
-          if (cur === 1 && this._lit) { unlightBuildings(); script(); }
+          if (cur === 1 && this._lit) script();
         }, 2200);
         $("#bloom-changi").classList.add("on");
         igniteSite(1);
         loctag("EE · DBS · Marina Bay · HVAC Optimization");
         showPanels("ee");
       }
+      // the floors scan bottom-to-top once the glass is on
+      if (this._lit) setXrayProgress((ms - 5600) / 3200);
       // barely-there drift: the camera holds, the building is the show
       if (ms > 5600 && !this._drift) {
         this._drift = true;
@@ -811,7 +903,7 @@ const PHASES = [
       if (ms > 15600) { captionOut(); loctag(""); }
       pinBloom($("#bloom-changi"), DBS_TOWER);
     },
-    exit() { captionOut(); loctag(""); hidePanels(); } },
+    exit() { captionOut(); loctag(""); hidePanels(); clearXray(); } },
 
   { name: "cbd", dur: 15000, // EM — the towers AROUND it light together (point → cluster)
     enter() {
@@ -944,6 +1036,7 @@ let playT = 0, cur = -1, last = performance.now();
 function resetWorld() {
   map.stop();
   unlightBuildings();
+  clearXray();
   allSitesOff();
   arcProgress = ARCS.map(() => 0); setArcData();
   if (map.getLayer("arc-flow")) map.setPaintProperty("arc-flow", "line-opacity", 0);
