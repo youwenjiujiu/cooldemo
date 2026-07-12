@@ -14,7 +14,8 @@ python3 -m http.server 8000
 
 ## Basemap / token
 
-`config.js` holds the Mapbox token:
+`config.js` is git-ignored — copy `config.example.js` to `config.js` and put your
+Mapbox public token in it:
 - Token set (current) → **Mapbox navigation-night-v1**: bright readable night map,
   live traffic colors, detailed building footprints.
 - Token empty → falls back to free **MapLibre + OpenFreeMap dark**, no token needed.
