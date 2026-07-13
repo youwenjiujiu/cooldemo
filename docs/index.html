@@ -151,6 +151,22 @@ canvas { display: block; }
   transition: max-height .45s cubic-bezier(.23,1,.32,1), opacity .45s ease, margin-top .45s ease; }
 .card canvas.show { max-height: 42px; opacity: 1; margin-top: 9px; }
 
+/* live telemetry card rows */
+.card .livetag { float: right; color: var(--green); font-size: 9px; letter-spacing: .16em;
+  animation: livepulse 1.5s ease-in-out infinite; }
+@keyframes livepulse { 50% { opacity: .35; } }
+.card .row { display: flex; justify-content: space-between; gap: 12px;
+  font-size: 11.5px; line-height: 1.4; padding: 3.5px 0;
+  border-bottom: 1px solid rgba(126,147,163,.12); }
+.card .row:last-of-type { border-bottom: none; }
+.card .row .k { color: var(--muted); }
+.card .row .v { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
+.card .row .v.good { color: var(--green); }
+.card .row .v.bad { color: var(--red); }
+.card .ont { margin-top: 8px; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--cyan); opacity: .8; }
+
 /* ---- finale outcomes panel ---- */
 #finale { position: absolute; right: 36px; top: 50%; transform: translateY(-50%) translateX(24px);
   z-index: 12; width: 300px; background: rgba(8,13,20,.82); border: 1px solid rgba(255,184,77,.4);
@@ -1125,63 +1141,80 @@ addEventListener("pointerup", (e) => {
   const wasClick = dragging && moved < 6;
   dragging = false;
   if (!wasClick) return;
-  if (!controlsEnabled) { next(); return; }   // presentation mode: click = advance
-  // explore mode: click picks a beacon
+  // a LIT building is inspectable at any time — presentation or explore
   const ndc = new THREE.Vector2(
     (e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   const ray = new THREE.Raycaster();
   ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects(clickMeshes, false)
-    .find((h) => h.object.parent.visible);
-  if (hit) focusBeacon(byKey[hit.object.userData.site.key]);
-  else { if (focus) { focus = null; hideAssetCard(); } flyTarget = null; }
+    .find((h) => byKey[h.object.userData.site.key].lit);
+  if (hit) { flyToAsset(hit.object.userData.site.key); return; }
+  if (assetCard) { hideAssetCard(); focus = null; return; }  // empty click puts the card away
+  if (!controlsEnabled) { next(); return; }   // presentation mode: click = advance
+  flyTarget = null;
 });
 renderer.domElement.addEventListener("wheel", (e) => {
   if (!controlsEnabled) return;
   speed = Math.max(120, Math.min(12000, speed * (e.deltaY > 0 ? 0.85 : 1.18)));
 });
 
-/* explore-mode asset card */
-let assetCard = null, assetCardAnchor = null;
+/* per-building live telemetry card — deterministic per site (a demo walkthrough
+   always shows the same numbers) with a gentle live tick */
+let assetCard = null, assetCardAnchor = null, assetCardTimer = null;
+function siteSeed(key) {
+  let h = 0;
+  for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return (i, a, b) => {
+    const x = Math.abs(Math.sin(h * 12.9898 + i * 78.233)) * 43758.5453;
+    return a + (x - Math.floor(x)) * (b - a);
+  };
+}
+function telemetryRows(s, tick) {
+  const r = siteSeed(s.key);
+  const hero = s.tier === "hero";
+  const j = (i, amp) => Math.sin(tick / 1.7 + i * 2.1) * amp;  // live wobble
+  const load = r(1, hero ? 2.2 : 0.5, hero ? 6.8 : 1.9) + j(1, 0.05);
+  const kwrt = r(2, 0.58, 0.71) + j(2, 0.004);
+  const occ  = Math.round(r(3, 42, 88) + j(3, 1.2));
+  const temp = r(4, 22.6, 24.2) + j(4, 0.05);
+  const closed = Math.round(r(5, 3, 26));
+  const fdd = s.key === "hdb" && currentFDD >= 1 && currentFDD < 4
+    ? ["FDD status", "fault under repair", "bad"]
+    : ["FDD status", "no active faults", "good"];
+  return [
+    ["Cooling load", load.toFixed(1) + " MW", ""],
+    ["Plant efficiency", kwrt.toFixed(2) + " kW/RT", kwrt < 0.65 ? "good" : ""],
+    ["Occupancy", occ + " %", ""],
+    ["Indoor comfort", temp.toFixed(1) + " °C", "good"],
+    ["Anomalies closed · 30d", String(closed), "good"],
+    fdd,
+  ];
+}
 function showAssetCard(b) {
   hideAssetCard();
   const s = b.site;
-  let lines;
-  if (s.key === "dbs") {
-    lines = [
-      ["em", "<b>Energy Efficiency</b> — flagship site"],
-      ["sense", "<b>Sensing</b> — occupancy · weather · tariffs"],
-      ["predict", "<b>Predicting</b> — cooling demand ahead"],
-      ["act", "<b>Acting</b> — setpoints retuned live"],
-    ];
-  } else if (s.key === "changi") {
-    lines = [
-      ["em", "<b>Energy Efficiency</b> — flights · passengers · weather"],
-      ["em", "Cooling retuned to the arrivals board, live"],
-      ["ok", "<b>FDD</b> — monitored · no active faults"],
-    ];
-  } else {
-    lines = [
-      ["em", s.tier === "hero" ? "<b>Energy Management</b> — client portfolio"
-                               : "<b>Energy Management</b> — island coverage"],
-      ["em", "Managed as one system, island-wide"],
-      ["ok", "<b>FDD</b> — monitored · no active faults"],
-    ];
-  }
-  assetCard = makeCard(s.org.toUpperCase(), lines);
-  assetCard.querySelectorAll(".ln").forEach((l) => l.classList.add("show"));
+  assetCard = document.createElement("div");
+  assetCard.className = "card data";
+  const t0 = performance.now();
+  const render = () => {
+    const rows = telemetryRows(s, (performance.now() - t0) / 1000);
+    assetCard.innerHTML =
+      `<div class="site">${s.org.toUpperCase()} · ${s.tier === "hero" ? "CLIENT" : "NODE"}` +
+      `<b class="livetag">● LIVE</b></div>` +
+      rows.map(([k, v, cls]) =>
+        `<div class="row"><span class="k">${k}</span><span class="v ${cls}">${v}</span></div>`).join("") +
+      `<div class="ont">every signal · one ontology</div>`;
+  };
+  render();
+  assetCardTimer = setInterval(render, 1600);
+  document.body.appendChild(assetCard);
   requestAnimationFrame(() => assetCard.classList.add("in"));
-  assetCardAnchor = b.group.position.clone().add(new THREE.Vector3(0, 260, 0));
+  assetCardAnchor = b.group.position.clone()
+    .add(new THREE.Vector3(0, Math.min(b.label.position.y * 0.7, 320), 0));
 }
 function hideAssetCard() {
+  if (assetCardTimer) { clearInterval(assetCardTimer); assetCardTimer = null; }
   if (assetCard) { assetCard.remove(); assetCard = null; assetCardAnchor = null; }
-}
-function focusBeacon(b) {
-  focus = b;
-  showAssetCard(b);
-  const dir = camera.position.clone().sub(b.group.position).setY(0).normalize();
-  flyTarget = b.group.position.clone()
-    .add(dir.multiplyScalar(1350)).add(new THREE.Vector3(0, 620, 0));
 }
 function resetView() {
   flyTarget = null; focus = null; hideAssetCard();
@@ -1326,7 +1359,7 @@ function frame() {
     tilesReady, tilesBusy, cam: camera.position.toArray().map(Math.round) };
 }
 frame();
-window.__next = next; window.__prev = prev; window.__goTo = goTo;
+window.__next = next; window.__prev = prev; window.__goTo = goTo; window.__flyTo = flyToAsset;
 </script>
 </body>
 </html>
