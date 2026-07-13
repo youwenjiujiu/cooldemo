@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Univers AIP — RUN AS ONE · Story Platform</title>
+<style>
+:root {
+  --cyan: #38e1d6; --amber: #ffb84d; --violet: #8c9aff; --red: #ff6b5d; --green: #4dffa6;
+  --text: #eaf6f8; --muted: #7e93a3;
+}
+html, body { margin: 0; height: 100%; background: #0a1420; overflow: hidden;
+  font-family: "Space Grotesk", "Avenir Next", -apple-system, "Segoe UI", system-ui, sans-serif;
+  color: var(--text); }
+canvas { display: block; }
+
+/* ---- loading gate: nothing is shown until the island is fully streamed ---- */
+#loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 22px; z-index: 40; background: #0a1420;
+  transition: opacity 1.1s ease; }
+#loading.done { opacity: 0; pointer-events: none; }
+#loading .brand { font-size: 12px; letter-spacing: .34em; text-transform: uppercase; color: #dfe9ee; }
+#loading .bigname { font-size: clamp(30px, 4.5vw, 54px); font-weight: 700; letter-spacing: .12em; color: #fff; }
+#loading .bar { width: min(380px, 60vw); height: 2px; background: rgba(56,225,214,.16); border-radius: 2px;
+  overflow: hidden; }
+#loading .bar i { display: block; height: 100%; width: 0%; background: var(--cyan);
+  transition: width .5s ease; }
+#loading .msg { color: var(--muted); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; }
+
+#title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; z-index: 10; pointer-events: none;
+  opacity: 0; transition: opacity 1.2s ease; text-shadow: 0 2px 30px rgba(0,0,0,.8); }
+#title.in { opacity: 1; }
+#title .eyebrow { font-size: 12px; letter-spacing: .3em; color: #dfe9ee; text-transform: uppercase; }
+#title h1 { font-size: clamp(40px, 6.5vw, 84px); font-weight: 700; margin: 14px 0 6px;
+  letter-spacing: .1em; color: #fff; }
+#title .sub { font-size: clamp(13px, 1.5vw, 17px); color: #d7e2e8; letter-spacing: .06em; }
+#title .go { margin-top: 34px; font-size: 12px; letter-spacing: .26em; text-transform: uppercase;
+  color: var(--cyan); animation: breathe 2.2s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .35; } }
+
+#chapter { position: absolute; top: 24px; left: 28px; z-index: 10; pointer-events: none;
+  font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #fff;
+  opacity: 0; transition: opacity .8s ease; text-shadow: 0 2px 14px rgba(0,0,0,.9); }
+#chapter b { color: var(--cyan); font-weight: 600; }
+#chapter.in { opacity: .95; }
+
+/* ---- presenter navigation ---- */
+#nav { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
+  display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+  background: rgba(8,13,20,.62); border: 1px solid rgba(56,225,214,.22); border-radius: 26px;
+  backdrop-filter: blur(10px); opacity: 0; transition: opacity .8s ease; }
+#nav.in { opacity: 1; }
+#nav button { background: none; border: none; color: var(--cyan); font-size: 17px; line-height: 1;
+  cursor: pointer; padding: 4px 6px; font-family: inherit; }
+#nav button:disabled { color: rgba(126,147,163,.4); cursor: default; }
+#dots { display: flex; gap: 7px; align-items: center; }
+#dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(126,147,163,.45);
+  transition: all .35s ease; cursor: pointer; }
+#dots i.on { background: var(--cyan); box-shadow: 0 0 8px rgba(56,225,214,.9); transform: scale(1.25); }
+#dots i.seen { background: rgba(56,225,214,.5); }
+
+#hint { position: absolute; bottom: 24px; left: 24px; z-index: 10; pointer-events: none;
+  font-size: 12px; letter-spacing: .06em; color: rgba(255,255,255,.7);
+  text-shadow: 0 1px 8px rgba(0,0,0,.9); opacity: 0; transition: opacity .8s ease; }
+#hint.in { opacity: 1; }
+
+/* ---- anchored cards: the story lives on the buildings ---- */
+.card { position: absolute; z-index: 11; pointer-events: none; width: 272px;
+  transform: translate(18px, -50%); background: rgba(10,16,24,.9);
+  border: 1px solid rgba(56,225,214,.5); border-radius: 10px; padding: 12px 15px;
+  backdrop-filter: blur(10px); opacity: 0; transition: opacity .45s ease, border-color .5s ease; }
+.card.in { opacity: 1; }
+.card.fault { border-color: rgba(255,107,93,.55); }
+.card.fault.resolved { border-color: rgba(77,255,166,.55); }
+.card.outcome { border-color: rgba(255,184,77,.5); }
+.card .site { font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 7px; }
+.card .ln { font-size: 11.5px; line-height: 1.55; display: none; color: var(--text); }
+.card .ln::before { content: "▸"; font-size: 9px; margin-right: 6px; }
+.card .ln.show { display: block; animation: lnin .5s ease; }
+@keyframes lnin { from { opacity: 0; transform: translateX(-6px); } }
+.card b { font-weight: 600; }
+.card .ln.sense::before, .card .ln.sense b { color: var(--cyan); }
+.card .ln.predict::before, .card .ln.predict b { color: var(--violet); }
+.card .ln.act::before, .card .ln.act b { color: var(--amber); }
+.card .ln.em::before, .card .ln.em b { color: var(--cyan); }
+.card .ln.ok::before, .card .ln.ok b { color: var(--green); }
+.card .ln.gain::before, .card .ln.gain b { color: var(--amber); }
+.card .ln.detect::before, .card .ln.detect b { color: var(--red); }
+.card .ln.diag::before, .card .ln.diag b { color: var(--amber); }
+.card .ln.dispatch::before, .card .ln.dispatch b { color: var(--violet); }
+.card .ln.done::before, .card .ln.done b { color: var(--green); }
+.card canvas { width: 100%; height: 42px; display: none; margin-top: 9px; }
+.card canvas.show { display: block; }
+
+/* ---- finale outcomes panel ---- */
+#finale { position: absolute; right: 36px; top: 50%; transform: translateY(-50%) translateX(24px);
+  z-index: 12; width: 300px; background: rgba(8,13,20,.82); border: 1px solid rgba(255,184,77,.4);
+  border-radius: 12px; padding: 18px 20px; backdrop-filter: blur(12px);
+  opacity: 0; transition: opacity .9s ease, transform .9s ease; pointer-events: none; }
+#finale.in { opacity: 1; transform: translateY(-50%) translateX(0); }
+#finale .site { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 12px; }
+#finale .o { font-size: 13.5px; line-height: 1.5; margin: 9px 0; color: var(--text);
+  opacity: 0; transform: translateX(10px); transition: all .6s ease; }
+#finale.in .o { opacity: 1; transform: none; }
+#finale .o b { color: var(--amber); font-weight: 600; }
+#finale .o.up b { color: var(--green); }
+#finale .foot { margin-top: 14px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--cyan); }
+</style>
+</head>
+<body>
+<div id="loading">
+  <div class="brand">Univers · AIP for Physical Infrastructure</div>
+  <div class="bigname">RUN AS ONE</div>
+  <div class="bar"><i id="loadbar"></i></div>
+  <div class="msg" id="loadmsg">Streaming Singapore…</div>
+</div>
+
+<div id="title">
+  <div class="eyebrow">Univers · AIP for Physical Infrastructure</div>
+  <h1>RUN AS ONE</h1>
+  <div class="sub">Energy · Assets · People · Space · Environment — the built environment, run as one</div>
+  <div class="go">点击 或 按 → 开始</div>
+</div>
+
+<div id="chapter"></div>
+<div id="hint"></div>
+
+<div id="nav">
+  <button id="prev">◀</button>
+  <div id="dots"></div>
+  <button id="next">▶</button>
+</div>
+
+<div id="finale">
+  <div class="site">What we deliver — every site, every day</div>
+  <div class="o">Energy bill — <b>down</b>, same comfort, less energy</div>
+  <div class="o">Capex — <b>deferred</b>, assets live longer</div>
+  <div class="o">OPEX — <b>leaner</b>, faults fixed before they grow</div>
+  <div class="o up">Space & NOI — <b>higher</b>, buildings earn more</div>
+  <div class="foot">One ontology — every signal, one language</div>
+</div>
+
+<script src="keys.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+  "3d-tiles-renderer": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.js",
+  "3d-tiles-renderer/plugins": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.plugins.js",
+  "3d-tiles-renderer/core": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.core.js",
+  "3d-tiles-renderer/three": "https://unpkg.com/3d-tiles-renderer@0.4.28/build/index.three.js"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { TilesRenderer, WGS84_ELLIPSOID } from "3d-tiles-renderer";
+import { CesiumIonAuthPlugin, GLTFExtensionsPlugin } from "3d-tiles-renderer/plugins";
+
+/* ================= DATA ================= */
+const SITES = [
+  { key:"changi",  org:"Changi Airport",  lng:103.9865, lat:1.3644, tier:"hero", tone:"amber" },
+  { key:"dbs",     org:"DBS",             lng:103.8540, lat:1.2790, tier:"hero", tone:"cyan" },
+  { key:"ocbc",    org:"OCBC",            lng:103.8492, lat:1.2846, tier:"hero", tone:"cyan" },
+  { key:"ngs",     org:"NGS",             lng:103.8513, lat:1.2903, tier:"hero", tone:"cyan" },
+  { key:"frasers", org:"Frasers",         lng:103.8465, lat:1.2770, tier:"hero", tone:"cyan" },
+  { key:"with",    org:"WITH",            lng:103.8450, lat:1.2815, tier:"hero", tone:"cyan" },
+  { key:"psa",     org:"PSA",             lng:103.8030, lat:1.2740, tier:"hero", tone:"cyan" },
+  { key:"mse",     org:"MSE",             lng:103.8320, lat:1.3110, tier:"hero", tone:"cyan" },
+  { key:"hdb",     org:"HDB",             lng:103.8490, lat:1.3330, tier:"hero", tone:"cyan" },
+  { key:"stengg",  org:"ST Engineering",  lng:103.8510, lat:1.3790, tier:"hero", tone:"cyan" },
+  { key:"htx",     org:"HTX",             lng:103.7880, lat:1.3070, tier:"hero", tone:"cyan" },
+  { key:"m0",  org:"Tuas Mega Port",            lng:103.6480, lat:1.2830, tier:"mock", tone:"cyan" },
+  { key:"m1",  org:"Jurong Island Energy Hub",  lng:103.7000, lat:1.2660, tier:"mock", tone:"cyan" },
+  { key:"m2",  org:"Jurong Logistics Campus",   lng:103.7430, lat:1.3340, tier:"mock", tone:"cyan" },
+  { key:"m3",  org:"NTU Smart Campus",          lng:103.6830, lat:1.3480, tier:"mock", tone:"cyan" },
+  { key:"m4",  org:"Tengah Eco Town",           lng:103.7160, lat:1.3740, tier:"mock", tone:"cyan" },
+  { key:"m5",  org:"Kranji AgriTech Park",      lng:103.7620, lat:1.4250, tier:"mock", tone:"cyan" },
+  { key:"m6",  org:"Woodlands Health Campus",   lng:103.7860, lat:1.4370, tier:"mock", tone:"cyan" },
+  { key:"m7",  org:"Sembawang Shipyard",        lng:103.8200, lat:1.4490, tier:"mock", tone:"cyan" },
+  { key:"m8",  org:"Yishun Community Hub",      lng:103.8350, lat:1.4290, tier:"mock", tone:"cyan" },
+  { key:"m9",  org:"Mandai Wildlife Reserve",   lng:103.7890, lat:1.4040, tier:"mock", tone:"cyan" },
+  { key:"m10", org:"Seletar Aerospace Park",    lng:103.8670, lat:1.4100, tier:"mock", tone:"cyan" },
+  { key:"m11", org:"Punggol Digital District",  lng:103.9060, lat:1.4050, tier:"mock", tone:"cyan" },
+  { key:"m12", org:"Sengkang Grid Cluster",     lng:103.8950, lat:1.3920, tier:"mock", tone:"cyan" },
+  { key:"m13", org:"Pasir Ris Central",         lng:103.9490, lat:1.3730, tier:"mock", tone:"cyan" },
+  { key:"m14", org:"Tampines Regional Centre",  lng:103.9450, lat:1.3540, tier:"mock", tone:"cyan" },
+  { key:"m15", org:"Changi Business Park",      lng:103.9640, lat:1.3340, tier:"mock", tone:"cyan" },
+  { key:"m16", org:"Expo & Convention Centre",  lng:103.9610, lat:1.3350, tier:"mock", tone:"cyan" },
+  { key:"m17", org:"Bedok Integrated Complex",  lng:103.9300, lat:1.3240, tier:"mock", tone:"cyan" },
+  { key:"m18", org:"Paya Lebar Quarter",        lng:103.8930, lat:1.3180, tier:"mock", tone:"cyan" },
+  { key:"m19", org:"Kallang Sports Hub",        lng:103.8740, lat:1.3040, tier:"mock", tone:"cyan" },
+  { key:"m20", org:"Orchard Retail Belt",       lng:103.8320, lat:1.3040, tier:"mock", tone:"cyan" },
+  { key:"m21", org:"one-north Innovation Park", lng:103.7870, lat:1.2990, tier:"mock", tone:"cyan" },
+  { key:"m22", org:"Mapletree Business City",   lng:103.7990, lat:1.2760, tier:"mock", tone:"cyan" },
+  { key:"m23", org:"Sentosa Resorts",           lng:103.8300, lat:1.2490, tier:"mock", tone:"cyan" },
+];
+
+const ORIGIN = { lng: 103.8200, lat: 1.3400 };
+const M_LNG = 111320 * Math.cos(ORIGIN.lat * Math.PI / 180);
+const M_LAT = 110540;
+const toLocal = (lng, lat) => new THREE.Vector3(
+  (lng - ORIGIN.lng) * M_LNG, 0, -(lat - ORIGIN.lat) * M_LAT);
+
+const COLORS = { cyan: 0x38e1d6, amber: 0xffb84d, red: 0xff6b5d, green: 0x4dffa6 };
+
+/* ================= RENDERER / SCENE ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9cc0dd);
+scene.fog = new THREE.Fog(0x9cc0dd, 30000, 220000);
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 2, 2e6);
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ================= GOOGLE 3D TILES ================= */
+const draco = new DRACOLoader();
+draco.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+
+const tiles = new TilesRenderer();
+tiles.registerPlugin(new CesiumIonAuthPlugin({
+  apiToken: ION_TOKEN, assetId: "2275207", autoRefreshToken: true }));
+tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
+tiles.setCamera(camera);
+tiles.setResolutionFromRenderer(camera, renderer);
+tiles.errorTarget = 2;
+scene.add(tiles.group);
+
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+tiles.addEventListener("load-model", ({ scene: tileScene }) => {
+  tileScene.traverse((o) => {
+    if (o.material && o.material.map) {
+      o.material.map.anisotropy = MAX_ANISO;
+      o.material.map.needsUpdate = true;
+    }
+  });
+});
+
+{
+  const enu = new THREE.Matrix4();
+  WGS84_ELLIPSOID.getEastNorthUpFrame(
+    ORIGIN.lat * Math.PI / 180, ORIGIN.lng * Math.PI / 180, 0, enu);
+  tiles.group.matrix.makeRotationX(-Math.PI / 2)
+    .multiply(enu.clone().invert());
+  tiles.group.matrix.decompose(
+    tiles.group.position, tiles.group.quaternion, tiles.group.scale);
+}
+
+/* ---- loading gate: reveal only when the opening shot is fully streamed ---- */
+let tilesReady = false, tilesBusy = true, revealed = false;
+const bootTime = performance.now();
+tiles.addEventListener("load-tile-set", () => { tilesReady = true; });
+tiles.addEventListener("tiles-load-start", () => { tilesBusy = true; });
+tiles.addEventListener("tiles-load-end", () => { tilesBusy = false; });
+
+function updateLoadingGate(now) {
+  if (revealed) return;
+  const elapsed = now - bootTime;
+  const prog = typeof tiles.loadProgress === "number" ? tiles.loadProgress
+    : (tilesReady ? (tilesBusy ? 0.6 : 1) : 0.15);
+  document.getElementById("loadbar").style.width =
+    Math.round(Math.min(prog, elapsed / 20000 + 0.2) * 100) + "%";
+  const settled = tilesReady && !tilesBusy && elapsed > 3500;
+  const timeout = elapsed > 25000 && tilesReady;   // never trap the presenter
+  if (settled || timeout) {
+    revealed = true;
+    document.getElementById("loadbar").style.width = "100%";
+    document.getElementById("loading").classList.add("done");
+    beginShow();
+  }
+}
+
+/* ================= BEACONS ================= */
+function labelSprite(text, hero) {
+  const c = document.createElement("canvas").getContext("2d");
+  c.font = "600 46px 'Space Grotesk','Avenir Next',sans-serif";
+  const w = Math.ceil(c.measureText(text).width) + 44;
+  const cv = c.canvas; cv.width = w; cv.height = 80;
+  const c2 = cv.getContext("2d");
+  c2.font = "600 46px 'Space Grotesk','Avenir Next',sans-serif";
+  c2.textAlign = "center"; c2.textBaseline = "middle";
+  c2.shadowColor = "rgba(0,0,0,.9)"; c2.shadowBlur = 12;
+  c2.fillStyle = "#f2fbfb";
+  c2.fillText(text, w / 2, 40);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthTest: false }));
+  const s = hero ? 9.0 : 5.6;
+  sp.scale.set(w * s, 80 * s, 1);
+  return sp;
+}
+
+const beacons = [];
+const clickMeshes = [];
+{
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
+  for (const s of SITES) {
+    const hero = s.tier === "hero";
+    const g = new THREE.Group();
+    g.position.copy(toLocal(s.lng, s.lat));
+    const H = hero ? 340 : 210, R = hero ? 11 : 7;
+
+    const core = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({
+      color: COLORS[s.tone], transparent: true, opacity: 0.9 }));
+    core.scale.set(R, H, R); core.position.y = H / 2;
+    g.add(core);
+
+    const shell = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({
+      color: COLORS[s.tone], transparent: true, opacity: 0.18,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+    shell.scale.set(R * 2.6, H, R * 2.6); shell.position.y = H / 2;
+    g.add(shell);
+
+    const label = labelSprite(s.org, hero);
+    label.position.y = H + (hero ? 120 : 80);
+    g.add(label);
+
+    g.visible = false;
+    scene.add(g);
+    core.userData.site = s;
+    clickMeshes.push(core);
+    beacons.push({ site: s, group: g, core, shell, label,
+      baseColor: COLORS[s.tone], grounded: false, lit: false, pulse: Math.random() * 6 });
+  }
+}
+const byKey = Object.fromEntries(beacons.map((b) => [b.site.key, b]));
+const HERO_KEYS = ["dbs", "ocbc", "ngs", "frasers", "with", "psa", "mse", "hdb", "stengg", "htx"];
+
+function setLit(b, on, delayLabel = 500) {
+  if (b.lit === on) return;
+  b.lit = on;
+  b.group.visible = on;
+  if (on) setTimeout(() => { if (b.lit) b.label.material.opacity = 0.95; }, delayLabel);
+  else b.label.material.opacity = 0;
+}
+
+/* settle beacon bases onto streamed terrain */
+const groundRay = new THREE.Raycaster();
+function settleBeacons() {
+  for (const b of beacons) {
+    if (b.grounded) continue;
+    groundRay.set(b.group.position.clone().setY(5000), new THREE.Vector3(0, -1, 0));
+    const hit = groundRay.intersectObject(tiles.group, true)[0];
+    if (hit) { b.group.position.y = hit.point.y - 8; b.grounded = true; }
+  }
+}
+setInterval(() => { if (tilesReady) settleBeacons(); }, 2500);
+
+/* ---- island-wide mesh network ---- */
+const MESH_EDGES = (() => {
+  const edges = [], seen = new Set();
+  beacons.forEach((a, i) => {
+    beacons.map((c, j) => ({ j, d: a.group.position.distanceTo(c.group.position) }))
+      .filter((x) => x.j !== i)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 2)
+      .forEach(({ j }) => {
+        const key = Math.min(i, j) + "-" + Math.max(i, j);
+        if (!seen.has(key)) { seen.add(key); edges.push([i, j]); }
+      });
+  });
+  return edges;
+})();
+
+// soft round sprite so flow particles read as light, not squares
+const dotTexture = (() => {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 64;
+  const c = cv.getContext("2d");
+  const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.4, "rgba(255,255,255,.55)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
+})();
+
+const arcs = [];
+const meshGroup = new THREE.Group();
+meshGroup.visible = false;
+scene.add(meshGroup);
+let meshFade = 0;                          // 0→1 draw-in when the network step arrives
+for (const [i, j] of MESH_EDGES) {
+  const a = beacons[i].group.position.clone().add(new THREE.Vector3(0, 220, 0));
+  const b = beacons[j].group.position.clone().add(new THREE.Vector3(0, 220, 0));
+  const mid = a.clone().lerp(b, 0.5);
+  mid.y += 260 + a.distanceTo(b) * 0.14;
+  const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(curve.getPoints(64)),
+    new THREE.LineBasicMaterial({ color: 0x8c9aff, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false }));
+  meshGroup.add(line);
+  const N = 14;
+  const ppos = new Float32Array(N * 3);
+  const pgeo = new THREE.BufferGeometry();
+  pgeo.setAttribute("position", new THREE.BufferAttribute(ppos, 3));
+  const pts = new THREE.Points(pgeo, new THREE.PointsMaterial({
+    map: dotTexture, color: 0xbffff8, size: 40, sizeAttenuation: true, transparent: true,
+    opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  meshGroup.add(pts);
+  arcs.push({ curve, line, pts, pgeo, ppos, N, offset: Math.random() });
+}
+function updateArcs(now, dt) {
+  if (!meshGroup.visible) return;
+  meshFade = Math.min(1, meshFade + dt * 0.5);
+  for (const arc of arcs) {
+    arc.line.material.opacity = 0.4 * meshFade;
+    arc.pts.material.opacity = 0.9 * meshFade;
+    for (let k = 0; k < arc.N; k++) {
+      const t = ((now / 5200) + arc.offset + k / arc.N) % 1;
+      const v = arc.curve.getPoint(Math.min(t, meshFade)); // arcs draw outward as they fade in
+      arc.ppos[k * 3] = v.x; arc.ppos[k * 3 + 1] = v.y; arc.ppos[k * 3 + 2] = v.z;
+    }
+    arc.pgeo.attributes.position.needsUpdate = true;
+  }
+}
+function setMesh(on, instant) {
+  meshGroup.visible = on;
+  meshFade = on && instant ? 1 : (on ? meshFade : 0);
+}
+
+/* ================= ANCHORED CARDS ================= */
+function makeCard(site, lines, cls = "") {
+  const el = document.createElement("div");
+  el.className = "card " + cls;
+  el.innerHTML = `<div class="site">${site}</div>` + lines.map(([c, html]) =>
+    `<div class="ln ${c}">${html}</div>`).join("") +
+    (cls === "tune" ? `<canvas width="242" height="42"></canvas>` : "");
+  document.body.appendChild(el);
+  return el;
+}
+function pinCard(el, worldPos) {
+  const p = worldPos.clone().project(camera);
+  const behind = p.z > 1;
+  el.style.display = behind ? "none" : "block";
+  el.style.left = ((p.x * 0.5 + 0.5) * innerWidth) + "px";
+  el.style.top = ((-p.y * 0.5 + 0.5) * innerHeight) + "px";
+}
+
+const CHANGI_P = toLocal(103.9865, 1.3644);
+const CBD_P = toLocal(103.8500, 1.2825);
+const HDB_P = toLocal(103.8490, 1.3330);
+
+/* Changi tuning card (sense → predict → act + convergence sparkline) */
+let tuneEl = null, tuneT0 = 0;
+const tuneSeed = Array.from({ length: 90 }, () => Math.random() * 2 - 1);
+function showTuneCard(instant) {
+  if (tuneEl) return;
+  tuneEl = makeCard("CHANGI AIRPORT · TERMINALS", [
+    ["sense", "<b>Sensing</b> — flights · passengers · weather"],
+    ["predict", "<b>Predicting</b> — cooling demand ahead"],
+    ["act", "<b>Acting</b> — setpoints retuned live"],
+  ], "tune");
+  tuneT0 = performance.now() - (instant ? 9000 : 0);
+  requestAnimationFrame(() => tuneEl.classList.add("in"));
+}
+function hideTuneCard() { if (tuneEl) { tuneEl.remove(); tuneEl = null; } }
+function updateTuneCard(now) {
+  if (!tuneEl) return;
+  const t = now - tuneT0;
+  const lines = tuneEl.querySelectorAll(".ln");
+  [200, 1500, 2800].forEach((at, i) => lines[i].classList.toggle("show", t >= at));
+  const cv = tuneEl.querySelector("canvas");
+  cv.classList.toggle("show", t >= 3800);
+  if (t >= 3800) {
+    const c = cv.getContext("2d");
+    c.clearRect(0, 0, cv.width, cv.height);
+    const settle = Math.max(0, Math.min(1, (t - 3800) / 5000));
+    c.beginPath();
+    for (let i = 0; i < 90; i++) {
+      const x = (i / 89) * cv.width;
+      const drift = Math.sin(i / 8 + now / 900) * 4;
+      const noise = tuneSeed[i] * 11 * (1 - settle * Math.min(1, i / 60));
+      const y = cv.height * 0.55 + drift + noise;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.strokeStyle = settle > 0.6 ? "#4dffa6" : "#ffb84d";
+    c.lineWidth = 1.6; c.stroke();
+  }
+  pinCard(tuneEl, CHANGI_P.clone().add(new THREE.Vector3(0, 480, 0)));
+}
+
+/* Changi outcome card (text only — the promise, not the dashboard) */
+let outcomeEl = null;
+function showOutcomeCard() {
+  if (outcomeEl) return;
+  outcomeEl = makeCard("CHANGI AIRPORT · OUTCOME", [
+    ["gain", "<b>Energy bill down</b> — same comfort, less energy"],
+    ["ok", "<b>Guaranteed in the contract</b> — if it doesn't save, we don't get paid"],
+  ], "outcome");
+  outcomeEl.querySelectorAll(".ln").forEach((l, i) =>
+    setTimeout(() => l.classList.add("show"), 300 + i * 900));
+  requestAnimationFrame(() => outcomeEl.classList.add("in"));
+}
+function hideOutcomeCard() { if (outcomeEl) { outcomeEl.remove(); outcomeEl = null; } }
+
+/* FDD card — advances one stage per presenter step */
+const FAULT = { detect: "Chiller efficiency drift", cause: "Condenser fouling" };
+let faultEl = null;
+function setFDD(stage, instant) {           // 0 none · 1 detect · 2 diagnose · 3 dispatch · 4 resolved
+  const b = byKey.hdb;
+  if (stage === 0) {
+    if (faultEl) { faultEl.remove(); faultEl = null; }
+    b.core.material.color.setHex(b.baseColor);
+    b.shell.material.color.setHex(b.baseColor);
+    return;
+  }
+  if (!faultEl) {
+    faultEl = makeCard("HDB · ANG MO KIO CAMPUS", [
+      ["detect", `<b>Fault detected</b> — ${FAULT.detect}`],
+      ["diag", `<b>Diagnosed</b> — ${FAULT.cause}`],
+      ["dispatch", "<b>Work order dispatched</b> — crew en route"],
+      ["done", "<b>Resolved</b> — performance restored"],
+    ], "fault");
+    requestAnimationFrame(() => faultEl.classList.add("in"));
+  }
+  faultEl.querySelectorAll(".ln").forEach((l, i) => l.classList.toggle("show", i < stage));
+  faultEl.classList.toggle("resolved", stage >= 4);
+  const red = stage >= 1 && stage < 4;
+  b.core.material.color.setHex(red ? COLORS.red : (stage >= 4 ? COLORS.green : b.baseColor));
+  b.shell.material.color.setHex(red ? COLORS.red : (stage >= 4 ? COLORS.green : b.baseColor));
+  if (stage >= 4) setTimeout(() => {
+    if (currentFDD >= 4) { b.core.material.color.setHex(b.baseColor); b.shell.material.color.setHex(b.baseColor); }
+  }, 2600);
+}
+let currentFDD = 0;
+
+/* ================= STEP ENGINE ================= */
+const $ = (s) => document.querySelector(s);
+
+// declarative scene state per step — back/forward always lands on exactly this
+const STEPS = [
+  { // 0 · opening
+    cam: { p: [2500, 15500, 23000], l: [2200, 0, 2500] }, dur: 0,
+    chapter: "",
+    state: { lit: "none", mesh: false, tune: false, outcome: false, fdd: 0, title: true, finale: false },
+  },
+  { // 1 · EE — arrive at Changi, the first building lights up
+    cam: { p: [CHANGI_P.x - 1500, 950, CHANGI_P.z + 1900], l: [CHANGI_P.x, 80, CHANGI_P.z] }, dur: 5200,
+    chapter: 'Chapter 1 · <b>Energy Efficiency</b>',
+    state: { lit: "changi", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
+  },
+  { // 2 · EE — the AI tuning loop, on the terminal itself
+    cam: { p: [CHANGI_P.x + 1700, 820, CHANGI_P.z + 1500], l: [CHANGI_P.x, 100, CHANGI_P.z] }, dur: 3400,
+    chapter: 'Chapter 1 · <b>Energy Efficiency</b>',
+    state: { lit: "changi", mesh: false, tune: true, outcome: false, fdd: 0, title: false, finale: false },
+  },
+  { // 3 · EE — the outcome, text only
+    cam: { p: [CHANGI_P.x + 500, 1500, CHANGI_P.z + 2900], l: [CHANGI_P.x, 100, CHANGI_P.z] }, dur: 2800,
+    chapter: 'Chapter 1 · <b>Energy Efficiency</b>',
+    state: { lit: "changi", mesh: false, tune: false, outcome: true, fdd: 0, title: false, finale: false },
+  },
+  { // 4 · EM — one client becomes a portfolio: CBD ignites
+    cam: { p: [CBD_P.x - 900, 1500, CBD_P.z + 2600], l: [CBD_P.x, 150, CBD_P.z] }, dur: 5200,
+    chapter: 'Chapter 2 · <b>Energy Management</b>',
+    state: { lit: "heroes", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
+  },
+  { // 5 · EM — pull back: coverage across the whole island
+    cam: { p: [2500, 7800, 14500], l: [2500, 0, 1500] }, dur: 4600,
+    chapter: 'Chapter 2 · <b>Energy Management</b>',
+    state: { lit: "all", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
+  },
+  { // 6 · EM — the island becomes one grid
+    cam: { p: [1800, 9500, 15500], l: [2500, 0, 800] }, dur: 3400,
+    chapter: 'Chapter 2 · <b>Energy Management</b>',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 0, title: false, finale: false },
+  },
+  { // 7 · IoC — FDD: a fault appears
+    cam: { p: [HDB_P.x - 1100, 900, HDB_P.z + 1800], l: [HDB_P.x, 100, HDB_P.z] }, dur: 4800,
+    chapter: 'Chapter 3 · <b>Intelligent Operations · FDD</b>',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 1, title: false, finale: false },
+  },
+  { // 8 · IoC — diagnosed
+    cam: null, dur: 0,
+    chapter: 'Chapter 3 · <b>Intelligent Operations · FDD</b>',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 2, title: false, finale: false },
+  },
+  { // 9 · IoC — dispatched
+    cam: null, dur: 0,
+    chapter: 'Chapter 3 · <b>Intelligent Operations · FDD</b>',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 3, title: false, finale: false },
+  },
+  { // 10 · IoC — resolved
+    cam: null, dur: 0,
+    chapter: 'Chapter 3 · <b>Intelligent Operations · FDD</b>',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 4, title: false, finale: false },
+  },
+  { // 11 · finale — run as one
+    cam: { p: [4200, 9800, 17000], l: [2200, 0, 2200] }, dur: 5600,
+    chapter: '<b>RUN AS ONE</b>',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 0, title: false, finale: true },
+  },
+  { // 12 · explore — hand the island to the audience
+    cam: { p: [4200, 2600, 11500], l: [2600, 0, 4200] }, dur: 4200,
+    chapter: '<b>Explore</b> · click any beacon',
+    state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 0, title: false, finale: false, explore: true },
+  },
+];
+
+let stepIdx = -1;
+let flight = null;    // { fromP, fromL, toP, toL, t0, dur, arriveIdx }
+let curP = new THREE.Vector3(...STEPS[0].cam.p);
+let curL = new THREE.Vector3(...STEPS[0].cam.l);
+const smooth = (p) => p * p * (3 - 2 * p);
+
+function litSetFor(name) {
+  if (name === "none") return new Set();
+  if (name === "changi") return new Set(["changi"]);
+  if (name === "heroes") return new Set(["changi", ...HERO_KEYS]);
+  return new Set(beacons.map((b) => b.site.key));
+}
+
+function applyState(st, forward) {
+  const want = litSetFor(st.lit);
+  let stagger = 0;
+  for (const b of beacons) {
+    const on = want.has(b.site.key);
+    if (on && !b.lit && forward) {
+      const d = 260 + stagger * (b.site.tier === "hero" ? 380 : 120);
+      stagger++;
+      setTimeout(() => { if (litSetFor(STEPS[stepIdx].state.lit).has(b.site.key)) setLit(b, true); }, d);
+    } else {
+      setLit(b, on, forward ? 500 : 0);
+    }
+  }
+  setMesh(st.mesh, !forward);
+  if (st.tune) showTuneCard(!forward); else hideTuneCard();
+  if (st.outcome) showOutcomeCard(); else hideOutcomeCard();
+  currentFDD = st.fdd;
+  setFDD(st.fdd, !forward);
+  $("#title").classList.toggle("in", !!st.title);
+  $("#finale").classList.toggle("in", !!st.finale);
+  controlsEnabled = !!st.explore;
+  $("#hint").classList.toggle("in", !!st.explore);
+  if (st.explore) {
+    $("#hint").textContent = "拖动 环视 · WASD 飞行 · Q/E 升降 · 滚轮 调速 · 点击光柱 看资产 · R 回到起点";
+    const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+    yaw = e.y; pitch = e.x;
+  }
+}
+
+function goTo(idx, opts = {}) {
+  idx = Math.max(0, Math.min(STEPS.length - 1, idx));
+  if (idx === stepIdx && !opts.force) return;
+  const forward = idx > stepIdx;
+  const prevIdx = stepIdx;
+  stepIdx = idx;
+  const S = STEPS[idx];
+
+  chapter(S.chapter);
+  updateNav();
+
+  // camera: fly if this step has a pose and we're not already there
+  if (S.cam) {
+    const toP = new THREE.Vector3(...S.cam.p);
+    const toL = new THREE.Vector3(...S.cam.l);
+    const dur = (opts.instant || prevIdx < 0) ? 0
+      : (forward ? S.dur : Math.min(S.dur || 2600, 2600));
+    if (dur > 0) {
+      flight = { fromP: curP.clone(), fromL: curL.clone(), toP, toL,
+        t0: performance.now(), dur, stateApplied: false, forward };
+    } else {
+      flight = null;
+      curP.copy(toP); curL.copy(toL);
+      camera.position.copy(toP); camera.lookAt(toL);
+      applyState(S.state, forward && !opts.instant);
+      return;
+    }
+    // content waits until the shot is 70% flown — arrive composed, then reveal
+    flight.revealAt = 0.7;
+  } else {
+    flight = null;
+    applyState(S.state, forward);
+  }
+}
+
+function runFlight(now) {
+  if (!flight) return;
+  const p = Math.min(1, (now - flight.t0) / flight.dur);
+  const e = smooth(p);
+  camera.position.lerpVectors(flight.fromP, flight.toP, e);
+  const look = new THREE.Vector3().lerpVectors(flight.fromL, flight.toL, e);
+  camera.lookAt(look);
+  curP.copy(camera.position); curL.copy(look);
+  if (!flight.stateApplied && p >= (flight.revealAt ?? 1)) {
+    flight.stateApplied = true;
+    applyState(STEPS[stepIdx].state, flight.forward);
+  }
+  if (p >= 1) {
+    if (!flight.stateApplied) applyState(STEPS[stepIdx].state, flight.forward);
+    flight = null;
+  }
+}
+
+function next() {
+  if (!revealed) return;
+  if (flight) {   // mid-flight: land the shot first
+    flight.t0 = -1e9;
+    return;
+  }
+  goTo(stepIdx + 1);
+}
+function prev() {
+  if (!revealed || stepIdx <= 0) return;
+  if (flight) { flight.t0 = -1e9; return; }
+  goTo(stepIdx - 1);
+}
+
+function chapter(html) {
+  const el = $("#chapter");
+  if (!html) { el.classList.remove("in"); return; }
+  el.innerHTML = html; el.classList.add("in");
+}
+
+/* nav dots */
+const dotsEl = $("#dots");
+STEPS.forEach((_, i) => {
+  const d = document.createElement("i");
+  d.onclick = (e) => { e.stopPropagation(); if (!flight) goTo(i); };
+  dotsEl.appendChild(d);
+});
+function updateNav() {
+  [...dotsEl.children].forEach((d, i) => {
+    d.classList.toggle("on", i === stepIdx);
+    d.classList.toggle("seen", i < stepIdx);
+  });
+  $("#prev").disabled = stepIdx <= 0;
+  $("#next").disabled = stepIdx >= STEPS.length - 1;
+}
+$("#prev").onclick = (e) => { e.stopPropagation(); prev(); };
+$("#next").onclick = (e) => { e.stopPropagation(); next(); };
+
+function beginShow() {
+  $("#nav").classList.add("in");
+  goTo(0, { instant: true, force: true });
+}
+
+/* ================= INPUT ================= */
+let controlsEnabled = false;
+const keys = new Set();
+let speed = 900;
+let yaw = 0, pitch = -0.55;
+let focus = null, flyTarget = null;
+
+function syncCameraRotation() {
+  camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, "YXZ"));
+}
+
+addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  if (e.code === "ArrowRight" || e.code === "Space" || e.code === "PageDown") { e.preventDefault(); next(); return; }
+  if (e.code === "ArrowLeft" || e.code === "PageUp") { e.preventDefault(); prev(); return; }
+  if (e.code === "Home") { goTo(0, { force: true }); return; }
+  keys.add(e.code);
+  if (e.code === "KeyR" && controlsEnabled) resetView();
+});
+addEventListener("keyup", (e) => keys.delete(e.code));
+
+let dragging = false, moved = 0, lastX = 0, lastY = 0;
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+});
+addEventListener("pointermove", (e) => {
+  if (!dragging || !controlsEnabled) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  moved += Math.abs(dx) + Math.abs(dy);
+  yaw -= dx * 0.0026;
+  pitch = Math.max(-1.45, Math.min(0.6, pitch - dy * 0.0026));
+  syncCameraRotation();
+  flyTarget = null;
+});
+addEventListener("pointerup", (e) => {
+  const wasClick = dragging && moved < 6;
+  dragging = false;
+  if (!wasClick) return;
+  if (!controlsEnabled) { next(); return; }   // presentation mode: click = advance
+  // explore mode: click picks a beacon
+  const ndc = new THREE.Vector2(
+    (e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(clickMeshes, false)
+    .find((h) => h.object.parent.visible);
+  if (hit) focusBeacon(byKey[hit.object.userData.site.key]);
+  else { if (focus) { focus = null; hideAssetCard(); } flyTarget = null; }
+});
+renderer.domElement.addEventListener("wheel", (e) => {
+  if (!controlsEnabled) return;
+  speed = Math.max(120, Math.min(12000, speed * (e.deltaY > 0 ? 0.85 : 1.18)));
+});
+
+/* explore-mode asset card */
+let assetCard = null, assetCardAnchor = null;
+function showAssetCard(b) {
+  hideAssetCard();
+  const s = b.site;
+  let lines;
+  if (s.key === "changi") {
+    lines = [
+      ["em", "<b>Energy Efficiency</b> — flagship site"],
+      ["sense", "<b>Sensing</b> — flights · passengers · weather"],
+      ["predict", "<b>Predicting</b> — cooling demand ahead"],
+      ["act", "<b>Acting</b> — setpoints retuned live"],
+    ];
+  } else {
+    lines = [
+      ["em", s.tier === "hero" ? "<b>Energy Management</b> — client portfolio"
+                               : "<b>Energy Management</b> — island coverage"],
+      ["em", "Managed as one system, island-wide"],
+      ["ok", "<b>FDD</b> — monitored · no active faults"],
+    ];
+  }
+  assetCard = makeCard(s.org.toUpperCase(), lines);
+  assetCard.querySelectorAll(".ln").forEach((l) => l.classList.add("show"));
+  requestAnimationFrame(() => assetCard.classList.add("in"));
+  assetCardAnchor = b.group.position.clone().add(new THREE.Vector3(0, 260, 0));
+}
+function hideAssetCard() {
+  if (assetCard) { assetCard.remove(); assetCard = null; assetCardAnchor = null; }
+}
+function focusBeacon(b) {
+  focus = b;
+  showAssetCard(b);
+  const dir = camera.position.clone().sub(b.group.position).setY(0).normalize();
+  flyTarget = b.group.position.clone()
+    .add(dir.multiplyScalar(1350)).add(new THREE.Vector3(0, 620, 0));
+}
+function resetView() {
+  flyTarget = null; focus = null; hideAssetCard();
+  camera.position.set(4200, 2600, 11500);
+  camera.lookAt(2600, 0, 4200);
+  const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+  yaw = e.y; pitch = e.x;
+}
+
+/* label decluttering */
+let lastDeclutter = 0;
+const declutterV = new THREE.Vector3();
+function declutterLabels(now) {
+  if (now - lastDeclutter < 150) return;
+  lastDeclutter = now;
+  const fovScale = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  const items = [];
+  for (const b of beacons) {
+    if (!b.lit) continue;
+    declutterV.copy(b.group.position).setY(b.group.position.y + b.label.position.y);
+    const dist = declutterV.distanceTo(camera.position);
+    const p = declutterV.clone().project(camera);
+    if (p.z > 1) { b.labelHidden = true; continue; }
+    const sx = (p.x * 0.5 + 0.5) * innerWidth;
+    const sy = (-p.y * 0.5 + 0.5) * innerHeight;
+    const h = (b.label.scale.y / dist) * fovScale;
+    const w = (b.label.scale.x / dist) * fovScale;
+    // a name that would fill the screen is noise, not a label
+    if (h > innerHeight * 0.09 || w > innerWidth * 0.5) { b.labelHidden = true; continue; }
+    items.push({ b, sx, sy, w, h, dist, hero: b.site.tier === "hero" });
+  }
+  items.sort((a, c) => (a.hero !== c.hero) ? (a.hero ? -1 : 1) : a.dist - c.dist);
+  const kept = [];
+  for (const it of items) {
+    const clash = kept.some((k) =>
+      Math.abs(k.sx - it.sx) < (k.w + it.w) * 0.5 &&
+      Math.abs(k.sy - it.sy) < (k.h + it.h) * 0.62);
+    it.b.labelHidden = clash;
+    if (!clash) kept.push(it);
+  }
+}
+
+/* altitude guard (explore mode) */
+const guardRay = new THREE.Raycaster();
+let lastGuard = 0;
+function altitudeGuard(now) {
+  if (now - lastGuard < 250) return;
+  lastGuard = now;
+  guardRay.set(camera.position.clone().add(new THREE.Vector3(0, 3000, 0)),
+    new THREE.Vector3(0, -1, 0));
+  guardRay.far = 100000;
+  const hit = guardRay.intersectObject(tiles.group, true)[0];
+  if (hit && camera.position.y < hit.point.y + 40) {
+    camera.position.y = hit.point.y + 40;
+  }
+}
+
+/* ================= MAIN LOOP ================= */
+camera.position.set(...STEPS[0].cam.p);
+camera.lookAt(...STEPS[0].cam.l);
+
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, clock.getDelta());
+  const now = performance.now();
+
+  updateLoadingGate(now);
+  runFlight(now);
+
+  if (controlsEnabled && !flight) {
+    const fwd = new THREE.Vector3();
+    camera.getWorldDirection(fwd);
+    const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
+    const v = speed * dt;
+    if (keys.has("KeyW")) camera.position.addScaledVector(fwd, v);
+    if (keys.has("KeyS")) camera.position.addScaledVector(fwd, -v);
+    if (keys.has("KeyD")) camera.position.addScaledVector(right, v);
+    if (keys.has("KeyA")) camera.position.addScaledVector(right, -v);
+    if (keys.has("KeyE")) camera.position.y += v;
+    if (keys.has("KeyQ")) camera.position.y -= v;
+    if (keys.size) flyTarget = null;
+
+    if (flyTarget) {
+      camera.position.lerp(flyTarget, 1 - Math.exp(-dt * 2.2));
+      if (focus) {
+        const m = new THREE.Matrix4().lookAt(camera.position,
+          focus.group.position.clone().add(new THREE.Vector3(0, 200, 0)), camera.up);
+        const q = new THREE.Quaternion().setFromRotationMatrix(m);
+        camera.quaternion.slerp(q, 1 - Math.exp(-dt * 3));
+        const e = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+        yaw = e.y; pitch = e.x;
+      }
+      if (camera.position.distanceTo(flyTarget) < 12) flyTarget = null;
+    }
+    altitudeGuard(now);
+    curP.copy(camera.position);
+  }
+
+  declutterLabels(now);
+  for (const b of beacons) {
+    if (!b.lit) continue;
+    b.pulse += dt * (b === focus ? 6 : 2.1);
+    const s = 0.72 + 0.28 * Math.sin(b.pulse);
+    b.core.material.opacity = 0.55 + 0.4 * s;
+    b.shell.material.opacity = 0.10 + 0.13 * s;
+    const want = b.labelHidden ? 0 : 0.95;
+    b.label.material.opacity += (want - b.label.material.opacity) * Math.min(1, dt * 8);
+  }
+
+  if (assetCard && assetCardAnchor) pinCard(assetCard, assetCardAnchor);
+  if (faultEl) pinCard(faultEl, HDB_P.clone().add(new THREE.Vector3(0, 340, 0)));
+  updateArcs(now, dt);
+  updateTuneCard(now);
+  if (outcomeEl) pinCard(outcomeEl, CHANGI_P.clone().add(new THREE.Vector3(0, 460, 0)));
+
+  camera.updateMatrixWorld();
+  tiles.setResolutionFromRenderer(camera, renderer);
+  tiles.update();
+  renderer.render(scene, camera);
+  window.__dbg = { revealed, stepIdx, flying: !!flight, cam: camera.position.toArray().map(Math.round) };
+}
+frame();
+window.__next = next; window.__prev = prev; window.__goTo = goTo;
+</script>
+</body>
+</html>
