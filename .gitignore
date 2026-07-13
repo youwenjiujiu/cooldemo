@@ -13,3 +13,4 @@ unreal/Saved/
 unreal/Content/**/*.uasset
 unreal/Content/**/*.umap
 unreal/keys.json
+unreal/cesium-request-cache.sqlite*
