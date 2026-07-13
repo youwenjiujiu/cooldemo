@@ -73,7 +73,19 @@ canvas { display: block; }
 .card.in { opacity: 1; }
 .card.fault { border-color: rgba(255,107,93,.55); }
 .card.fault.resolved { border-color: rgba(77,255,166,.55); }
-.card.outcome { border-color: rgba(255,184,77,.5); }
+.card.outcome { border-color: rgba(255,184,77,.5); overflow: hidden;
+  animation: holo-tilt 7s ease-in-out infinite;
+  box-shadow: 0 0 34px rgba(255,184,77,.28), inset 0 0 22px rgba(255,184,77,.08); }
+@keyframes holo-tilt {
+  0%, 100% { transform: translate(18px, -50%) perspective(700px) rotateY(-7deg); }
+  50%      { transform: translate(18px, -52%) perspective(700px) rotateY(5deg); } }
+.card.outcome::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(112deg, transparent 36%, rgba(255,222,160,.28) 48%, transparent 58%);
+  background-size: 240% 100%; animation: holo-sheen 2.8s linear infinite; }
+@keyframes holo-sheen { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+.card.outcome .stat { font-size: 30px; font-weight: 800; color: #ffd88f;
+  margin: 2px 0 6px; letter-spacing: .01em; font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 24px rgba(255,184,77,.65); }
 .card .site { font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
   color: var(--muted); margin-bottom: 7px; }
 .card .ln { font-size: 11.5px; line-height: 1.55; display: none; color: var(--text); }
@@ -211,7 +223,7 @@ const COLORS = { cyan: 0x38e1d6, amber: 0xffb84d, red: 0xff6b5d, green: 0x4dffa6
 /* ================= RENDERER / SCENE ================= */
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // 2x on Retina = 4x pixels = slideshow
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -237,7 +249,9 @@ tiles.registerPlugin(new CesiumIonAuthPlugin({
 tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
 tiles.setCamera(camera);
 tiles.setResolutionFromRenderer(camera, renderer);
-tiles.errorTarget = 2;
+// tile quality: errorTarget 2 streams insane geometry and stutters on
+// integrated GPUs; 8 still reads photoreal at presentation distances
+tiles.errorTarget = 8;
 scene.add(tiles.group);
 
 const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
@@ -523,16 +537,17 @@ function pinCard(el, worldPos) {
 }
 
 const CHANGI_P = toLocal(103.9865, 1.3644);
+const DBS_P = toLocal(103.8540, 1.2790);
 const CBD_P = toLocal(103.8500, 1.2825);
 const HDB_P = toLocal(103.8490, 1.3330);
 
-/* Changi tuning card (sense → predict → act + convergence sparkline) */
+/* DBS tuning card (sense → predict → act + convergence sparkline) */
 let tuneEl = null, tuneT0 = 0;
 const tuneSeed = Array.from({ length: 90 }, () => Math.random() * 2 - 1);
 function showTuneCard(instant) {
   if (tuneEl) return;
-  tuneEl = makeCard("CHANGI AIRPORT · TERMINALS", [
-    ["sense", "<b>Sensing</b> — flights · passengers · weather"],
+  tuneEl = makeCard("DBS TOWER · MARINA BAY", [
+    ["sense", "<b>Sensing</b> — occupancy · weather · tariffs"],
     ["predict", "<b>Predicting</b> — cooling demand ahead"],
     ["act", "<b>Acting</b> — setpoints retuned live"],
   ], "tune");
@@ -562,17 +577,27 @@ function updateTuneCard(now) {
     c.strokeStyle = settle > 0.6 ? "#4dffa6" : "#ffb84d";
     c.lineWidth = 1.6; c.stroke();
   }
-  pinCard(tuneEl, CHANGI_P.clone().add(new THREE.Vector3(0, 480, 0)));
+  pinCard(tuneEl, DBS_P.clone().add(new THREE.Vector3(0, 420, 0)));
 }
 
-/* Changi outcome card (text only — the promise, not the dashboard) */
+/* DBS outcome card — holographic, with a counting headline figure */
 let outcomeEl = null;
 function showOutcomeCard() {
   if (outcomeEl) return;
-  outcomeEl = makeCard("CHANGI AIRPORT · OUTCOME", [
+  outcomeEl = makeCard("DBS TOWER · OUTCOME", [
     ["gain", "<b>Energy bill down</b> — same comfort, less energy"],
     ["ok", "<b>Guaranteed in the contract</b> — if it doesn't save, we don't get paid"],
   ], "outcome");
+  const stat = document.createElement("div");
+  stat.className = "stat";
+  outcomeEl.insertBefore(stat, outcomeEl.querySelector(".ln"));
+  const t0 = performance.now();
+  (function count(now) {
+    const q = Math.min(1, (now - t0 - 400) / 1400);
+    const v = 13.2 * (q <= 0 ? 0 : 1 - Math.pow(1 - q, 3));
+    stat.textContent = "−" + v.toFixed(1) + "%";
+    if (q < 1 && stat.isConnected) requestAnimationFrame(count);
+  })(t0);
   outcomeEl.querySelectorAll(".ln").forEach((l, i) =>
     setTimeout(() => l.classList.add("show"), 300 + i * 900));
   requestAnimationFrame(() => outcomeEl.classList.add("in"));
@@ -620,23 +645,23 @@ const STEPS = [
     chapter: "",
     state: { lit: "none", mesh: false, tune: false, outcome: false, fdd: 0, title: true, finale: false },
   },
-  { // 1 · EE — arrive at Changi, the first building lights up
-    cam: { p: [CHANGI_P.x - 1500, 950, CHANGI_P.z + 1900], l: [CHANGI_P.x, 80, CHANGI_P.z] }, dur: 5200,
+  { // 1 · EE — it starts with ONE tower: DBS at Marina Bay
+    cam: { p: [DBS_P.x - 1100, 780, DBS_P.z + 1500], l: [DBS_P.x, 120, DBS_P.z] }, dur: 5200,
     chapter: 'Chapter 1 · <b>Energy Efficiency</b>',
-    state: { lit: "changi", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
+    state: { lit: "dbs", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
   },
-  { // 2 · EE — the AI tuning loop, on the terminal itself
-    cam: { p: [CHANGI_P.x + 1700, 820, CHANGI_P.z + 1500], l: [CHANGI_P.x, 100, CHANGI_P.z] }, dur: 3400,
+  { // 2 · EE — the AI tuning loop, on the tower itself (gentle drift, no swing)
+    cam: { p: [DBS_P.x - 700, 860, DBS_P.z + 1700], l: [DBS_P.x, 140, DBS_P.z] }, dur: 3000,
     chapter: 'Chapter 1 · <b>Energy Efficiency</b>',
-    state: { lit: "changi", mesh: false, tune: true, outcome: false, fdd: 0, title: false, finale: false },
+    state: { lit: "dbs", mesh: false, tune: true, outcome: false, fdd: 0, title: false, finale: false },
   },
-  { // 3 · EE — the outcome, text only
-    cam: { p: [CHANGI_P.x + 500, 1500, CHANGI_P.z + 2900], l: [CHANGI_P.x, 100, CHANGI_P.z] }, dur: 2800,
+  { // 3 · EE — the outcome, on the same shot
+    cam: { p: [DBS_P.x - 300, 1050, DBS_P.z + 2000], l: [DBS_P.x, 140, DBS_P.z] }, dur: 2600,
     chapter: 'Chapter 1 · <b>Energy Efficiency</b>',
-    state: { lit: "changi", mesh: false, tune: false, outcome: true, fdd: 0, title: false, finale: false },
+    state: { lit: "dbs", mesh: false, tune: false, outcome: true, fdd: 0, title: false, finale: false },
   },
-  { // 4 · EM — one client becomes a portfolio: CBD ignites
-    cam: { p: [CBD_P.x - 900, 1500, CBD_P.z + 2600], l: [CBD_P.x, 150, CBD_P.z] }, dur: 5200,
+  { // 4 · EM — the towers AROUND it join, together (small pull-back, same axis)
+    cam: { p: [CBD_P.x - 500, 1600, CBD_P.z + 2700], l: [CBD_P.x, 150, CBD_P.z] }, dur: 4200,
     chapter: 'Chapter 2 · <b>Energy Management</b>',
     state: { lit: "heroes", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
   },
@@ -690,20 +715,26 @@ const smooth = (p) => p * p * (3 - 2 * p);
 
 function litSetFor(name) {
   if (name === "none") return new Set();
-  if (name === "changi") return new Set(["changi"]);
-  if (name === "heroes") return new Set(["changi", ...HERO_KEYS]);
+  if (name === "dbs") return new Set(["dbs"]);
+  if (name === "heroes") return new Set(["dbs", "ocbc", "ngs", "frasers", "with"]);
   return new Set(beacons.map((b) => b.site.key));
+}
+
+// point → plane: everything ignites as a wavefront radiating from DBS —
+// the CBD cluster pops together, then the ripple sweeps the island outward
+const DBS_SITE = SITES.find((s) => s.key === "dbs");
+function rippleDelay(site) {
+  const d = Math.hypot(site.lng - DBS_SITE.lng, site.lat - DBS_SITE.lat);
+  return 260 + d * 14000; // ~0.26 s at DBS → ~+4 s at Tuas
 }
 
 function applyState(st, forward) {
   const want = litSetFor(st.lit);
-  let stagger = 0;
   for (const b of beacons) {
     const on = want.has(b.site.key);
     if (on && !b.lit && forward) {
-      const d = 260 + stagger * (b.site.tier === "hero" ? 380 : 120);
-      stagger++;
-      setTimeout(() => { if (litSetFor(STEPS[stepIdx].state.lit).has(b.site.key)) setLit(b, true); }, d);
+      setTimeout(() => { if (litSetFor(STEPS[stepIdx].state.lit).has(b.site.key)) setLit(b, true); },
+        rippleDelay(b.site));
     } else {
       setLit(b, on, forward ? 500 : 0);
     }
@@ -881,12 +912,18 @@ function showAssetCard(b) {
   hideAssetCard();
   const s = b.site;
   let lines;
-  if (s.key === "changi") {
+  if (s.key === "dbs") {
     lines = [
       ["em", "<b>Energy Efficiency</b> — flagship site"],
-      ["sense", "<b>Sensing</b> — flights · passengers · weather"],
+      ["sense", "<b>Sensing</b> — occupancy · weather · tariffs"],
       ["predict", "<b>Predicting</b> — cooling demand ahead"],
       ["act", "<b>Acting</b> — setpoints retuned live"],
+    ];
+  } else if (s.key === "changi") {
+    lines = [
+      ["em", "<b>Energy Efficiency</b> — flights · passengers · weather"],
+      ["em", "Cooling retuned to the arrivals board, live"],
+      ["ok", "<b>FDD</b> — monitored · no active faults"],
     ];
   } else {
     lines = [
@@ -1028,7 +1065,7 @@ function frame() {
   if (faultEl) pinCard(faultEl, HDB_P.clone().add(new THREE.Vector3(0, 340, 0)));
   updateArcs(now, dt);
   updateTuneCard(now);
-  if (outcomeEl) pinCard(outcomeEl, CHANGI_P.clone().add(new THREE.Vector3(0, 460, 0)));
+  if (outcomeEl) pinCard(outcomeEl, DBS_P.clone().add(new THREE.Vector3(0, 420, 0)));
 
   camera.updateMatrixWorld();
   if (!fallbackActive) {
