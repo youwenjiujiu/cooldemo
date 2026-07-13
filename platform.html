@@ -392,32 +392,49 @@ const beacons = [];
 const clickMeshes = [];
 {
   const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
+  const discGeo = new THREE.CircleGeometry(1, 40);
+  const ringGeo = new THREE.RingGeometry(0.86, 1, 48);
   for (const s of SITES) {
     const hero = s.tier === "hero";
     const g = new THREE.Group();
     g.position.copy(toLocal(s.lng, s.lat));
-    const H = hero ? 340 : 210, R = hero ? 11 : 7;
+    // daylight photoreal tiles wash out thin translucent geometry — the lit
+    // state must be a fat saturated pillar plus a ground glow, not a wisp
+    const H = hero ? 520 : 330, R = hero ? 30 : 19;
 
     const core = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({
-      color: COLORS[s.tone], transparent: true, opacity: 0.9 }));
+      color: COLORS[s.tone], transparent: true, opacity: 0.95 }));
     core.scale.set(R, H, R); core.position.y = H / 2;
     g.add(core);
 
     const shell = new THREE.Mesh(cylGeo, new THREE.MeshBasicMaterial({
-      color: COLORS[s.tone], transparent: true, opacity: 0.18,
+      color: COLORS[s.tone], transparent: true, opacity: 0.22,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
-    shell.scale.set(R * 2.6, H, R * 2.6); shell.position.y = H / 2;
+    shell.scale.set(R * 2.4, H * 1.02, R * 2.4); shell.position.y = H * 0.51;
     g.add(shell);
 
+    // ground presence: a saturated glow disc the size of the block…
+    const disc = new THREE.Mesh(discGeo, new THREE.MeshBasicMaterial({
+      color: COLORS[s.tone], transparent: true, opacity: 0.38, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2; disc.position.y = 6;
+    disc.scale.setScalar(hero ? 240 : 150);
+    g.add(disc);
+    // …and an expanding pulse ring that keeps announcing "this one is live"
+    const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+      color: COLORS[s.tone], transparent: true, opacity: 0.0,
+      side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 8;
+    g.add(ring);
+
     const label = labelSprite(s.org, hero);
-    label.position.y = H + (hero ? 120 : 80);
+    label.position.y = H + (hero ? 46 : 32); // sits ON the pillar, not adrift above it
     g.add(label);
 
     g.visible = false;
     scene.add(g);
     core.userData.site = s;
     clickMeshes.push(core);
-    beacons.push({ site: s, group: g, core, shell, label,
+    beacons.push({ site: s, group: g, core, shell, disc, ring, label,
       baseColor: COLORS[s.tone], grounded: false, lit: false, pulse: Math.random() * 6 });
   }
 }
@@ -609,10 +626,11 @@ const FAULT = { detect: "Chiller efficiency drift", cause: "Condenser fouling" }
 let faultEl = null;
 function setFDD(stage, instant) {           // 0 none · 1 detect · 2 diagnose · 3 dispatch · 4 resolved
   const b = byKey.hdb;
+  const tint = (hex) => [b.core, b.shell, b.disc, b.ring].forEach((m) =>
+    m.material.color.setHex(hex));
   if (stage === 0) {
     if (faultEl) { faultEl.remove(); faultEl = null; }
-    b.core.material.color.setHex(b.baseColor);
-    b.shell.material.color.setHex(b.baseColor);
+    tint(b.baseColor);
     return;
   }
   if (!faultEl) {
@@ -627,10 +645,9 @@ function setFDD(stage, instant) {           // 0 none · 1 detect · 2 diagnose 
   faultEl.querySelectorAll(".ln").forEach((l, i) => l.classList.toggle("show", i < stage));
   faultEl.classList.toggle("resolved", stage >= 4);
   const red = stage >= 1 && stage < 4;
-  b.core.material.color.setHex(red ? COLORS.red : (stage >= 4 ? COLORS.green : b.baseColor));
-  b.shell.material.color.setHex(red ? COLORS.red : (stage >= 4 ? COLORS.green : b.baseColor));
+  tint(red ? COLORS.red : (stage >= 4 ? COLORS.green : b.baseColor));
   if (stage >= 4) setTimeout(() => {
-    if (currentFDD >= 4) { b.core.material.color.setHex(b.baseColor); b.shell.material.color.setHex(b.baseColor); }
+    if (currentFDD >= 4) tint(b.baseColor);
   }, 2600);
 }
 let currentFDD = 0;
@@ -1055,8 +1072,13 @@ function frame() {
     if (!b.lit) continue;
     b.pulse += dt * (b === focus ? 6 : 2.1);
     const s = 0.72 + 0.28 * Math.sin(b.pulse);
-    b.core.material.opacity = 0.55 + 0.4 * s;
-    b.shell.material.opacity = 0.10 + 0.13 * s;
+    b.core.material.opacity = 0.78 + 0.22 * s;
+    b.shell.material.opacity = 0.14 + 0.14 * s;
+    b.disc.material.opacity = 0.30 + 0.14 * s;
+    // ring blasts outward and fades, over and over
+    const q = (b.pulse % 2.6) / 2.6;
+    b.ring.scale.setScalar((b.site.tier === "hero" ? 240 : 150) * (0.4 + q * 2.6));
+    b.ring.material.opacity = 0.55 * (1 - q);
     const want = b.labelHidden ? 0 : 0.95;
     b.label.material.opacity += (want - b.label.material.opacity) * Math.min(1, dt * 8);
   }
