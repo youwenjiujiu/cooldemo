@@ -256,6 +256,9 @@ canvas { display: block; }
 <script type="module">
 import * as THREE from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { Line2 } from "three/addons/lines/Line2.js";
+import { LineGeometry } from "three/addons/lines/LineGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { TilesRenderer, WGS84_ELLIPSOID } from "3d-tiles-renderer";
 import { CesiumIonAuthPlugin, GLTFExtensionsPlugin } from "3d-tiles-renderer/plugins";
 
@@ -323,6 +326,7 @@ addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  arcMat.resolution.set(innerWidth, innerHeight);
 });
 
 /* ================= GOOGLE 3D TILES ================= */
@@ -638,33 +642,38 @@ const meshGroup = new THREE.Group();
 meshGroup.visible = false;
 scene.add(meshGroup);
 let meshFade = 0;                          // 0→1 draw-in when the network step arrives
+// fat lines (pixel-width) — native WebGL lines are 1px and vanish on a bright
+// daylight ground; one shared material so the whole net fades as one
+const arcMat = new LineMaterial({ color: 0xa9b8ff, linewidth: 2.6, transparent: true,
+  opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+arcMat.resolution.set(innerWidth, innerHeight);
 for (const [i, j] of MESH_EDGES) {
   const a = beacons[i].group.position.clone().add(new THREE.Vector3(0, 220, 0));
   const b = beacons[j].group.position.clone().add(new THREE.Vector3(0, 220, 0));
   const mid = a.clone().lerp(b, 0.5);
-  mid.y += 260 + a.distanceTo(b) * 0.14;
+  mid.y += 420 + a.distanceTo(b) * 0.18;   // tall arches read from an oblique shot
   const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-  const line = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(curve.getPoints(64)),
-    new THREE.LineBasicMaterial({ color: 0x8c9aff, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false }));
+  const lgeo = new LineGeometry();
+  lgeo.setPositions(curve.getPoints(64).flatMap((v) => [v.x, v.y, v.z]));
+  const line = new Line2(lgeo, arcMat);
+  line.computeLineDistances();
   meshGroup.add(line);
   const N = 14;
   const ppos = new Float32Array(N * 3);
   const pgeo = new THREE.BufferGeometry();
   pgeo.setAttribute("position", new THREE.BufferAttribute(ppos, 3));
   const pts = new THREE.Points(pgeo, new THREE.PointsMaterial({
-    map: dotTexture, color: 0xbffff8, size: 40, sizeAttenuation: true, transparent: true,
+    map: dotTexture, color: 0xbffff8, size: 58, sizeAttenuation: true, transparent: true,
     opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   meshGroup.add(pts);
-  arcs.push({ curve, line, pts, pgeo, ppos, N, offset: Math.random() });
+  arcs.push({ curve, pts, pgeo, ppos, N, offset: Math.random() });
 }
 function updateArcs(now, dt) {
   if (!meshGroup.visible) return;
   meshFade = Math.min(1, meshFade + dt * 0.5);
+  arcMat.opacity = 0.85 * meshFade;
   for (const arc of arcs) {
-    arc.line.material.opacity = 0.4 * meshFade;
-    arc.pts.material.opacity = 0.9 * meshFade;
+    arc.pts.material.opacity = 1.0 * meshFade;
     for (let k = 0; k < arc.N; k++) {
       const t = (((REDUCED ? 0 : now / 5200)) + arc.offset + k / arc.N) % 1;
       const v = arc.curve.getPoint(Math.min(t, meshFade)); // arcs draw outward as they fade in
@@ -832,8 +841,9 @@ const STEPS = [
     chapter: 'Chapter 2 · <b>Energy Management</b>',
     state: { lit: "all", mesh: false, tune: false, outcome: false, fdd: 0, title: false, finale: false },
   },
-  { // 6 · EM — the island becomes one grid
-    cam: { p: [1800, 9500, 15500], l: [2500, 0, 800] }, dur: 3400,
+  { // 6 · EM — the island becomes one grid: low oblique shot so the arcs stand
+    // up against the ground instead of being flattened by a top-down view
+    cam: { p: [2600, 3600, 12800], l: [2200, 300, 2600] }, dur: 3400,
     chapter: 'Chapter 2 · <b>Energy Management</b>',
     state: { lit: "all", mesh: true, tune: false, outcome: false, fdd: 0, title: false, finale: false },
   },
