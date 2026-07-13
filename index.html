@@ -112,42 +112,59 @@ html, body { margin: 0; height: 100%; background: #05080d; overflow: hidden;
 .side li small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px;
   line-height: 1.4; }
 
-/* OUTCOME panel — holographic 3D cards: the whole panel breathes in perspective,
-   live outcomes fly in as 3D plates, float, and run a light sweep */
-#panel-outcome.in { animation: holo-panel 8s ease-in-out infinite; }
+/* OUTCOME panel — a full hologram: swings in as a 3D plate with overshoot, then
+   keeps breathing in perspective while its glow pulses like a projector */
+#panel-outcome.in {
+  animation: holo-in 1.1s cubic-bezier(.16, 1.3, .3, 1) both,
+             holo-panel 7s ease-in-out 1.1s infinite; }
+@keyframes holo-in {
+  0%   { opacity: 0; transform: translate(120px, -50%) perspective(900px) rotateY(-55deg) scale(.82); }
+  60%  { opacity: 1; }
+  78%  { transform: translate(-8px, -50%) perspective(900px) rotateY(4deg) scale(1.02); }
+  100% { transform: translate(0, -50%) perspective(900px) rotateY(-8deg) scale(1); } }
 @keyframes holo-panel {
-  0%, 100% { transform: translate(0, -50%) perspective(900px) rotateY(-6deg); }
-  50%      { transform: translate(0, -50%) perspective(900px) rotateY(1deg); } }
-#panel-outcome ul { perspective: 640px; }
-#panel-outcome li { transform: translateX(52px) rotateY(-70deg); transform-origin: right center;
-  transform-style: preserve-3d; position: relative;
-  transition: opacity .65s ease, transform .85s cubic-bezier(.18, 1.4, .3, 1); }
-#panel-outcome.in li { transform: translateX(0) rotateY(0); }
-#panel-outcome li:not(.dim) > div { animation: holo-float 3.6s ease-in-out infinite;
+  0%, 100% { transform: translate(0, -50%) perspective(900px) rotateY(-8deg) translateZ(0);
+    box-shadow: 0 0 36px rgba(255, 184, 77, .16), inset 0 0 30px rgba(255, 184, 77, .05); }
+  50%      { transform: translate(0, -50%) perspective(900px) rotateY(2deg) translateZ(14px);
+    box-shadow: 0 0 68px rgba(255, 184, 77, .38), inset 0 0 44px rgba(255, 184, 77, .1); } }
+#panel-outcome ul { perspective: 520px; }
+#panel-outcome li { transform: translateX(96px) rotateY(-92deg) scale(.7);
+  transform-origin: right center; transform-style: preserve-3d; position: relative;
+  transition: opacity .7s ease, transform 1s cubic-bezier(.16, 1.5, .3, 1); }
+#panel-outcome.in li { transform: translateX(0) rotateY(0) scale(1); }
+/* live cards levitate — z-lift, tumble and tilt like plates suspended in a field */
+#panel-outcome li:not(.dim) > div { animation: holo-float 3.2s ease-in-out infinite;
   transform-style: preserve-3d; }
+#panel-outcome li:not(.dim):nth-child(even) > div { animation-delay: -1.6s; }
 @keyframes holo-float {
-  0%, 100% { transform: translateZ(0) rotateX(0); }
-  50%      { transform: translateZ(16px) rotateX(4deg); } }
+  0%, 100% { transform: translateZ(0) rotateX(0) rotateY(0); }
+  33%      { transform: translateZ(22px) rotateX(6deg) rotateY(-3deg); }
+  66%      { transform: translateZ(10px) rotateX(-3deg) rotateY(2.5deg); } }
 #panel-outcome li:not(.dim)::after { content: ""; position: absolute; inset: 0;
   pointer-events: none;
-  background: linear-gradient(112deg, transparent 34%, rgba(255, 222, 160, .3) 48%,
-    transparent 60%);
-  background-size: 260% 100%; animation: holo-sheen 2.6s linear infinite; }
+  background: linear-gradient(112deg, transparent 30%, rgba(255, 226, 168, .45) 48%,
+    transparent 62%);
+  background-size: 260% 100%; animation: holo-sheen 2.1s linear infinite; }
 @keyframes holo-sheen { from { background-position: 190% 0; } to { background-position: -90% 0; } }
-#panel-outcome li:not(.dim) { animation: holo-glow 2.4s ease-in-out infinite; }
+#panel-outcome li:not(.dim) { animation: holo-glow 2.2s ease-in-out infinite; }
+#panel-outcome li:not(.dim):nth-child(even) { animation-delay: -1.1s; }
 @keyframes holo-glow {
-  0%, 100% { box-shadow: inset 1px 0 8px rgba(255, 184, 77, .12), 0 0 0 rgba(255, 184, 77, 0); }
-  50%      { box-shadow: inset 1px 0 14px rgba(255, 184, 77, .28), 0 6px 22px rgba(255, 184, 77, .3); } }
+  0%, 100% { box-shadow: inset 1px 0 8px rgba(255, 184, 77, .14), 0 0 0 rgba(255, 184, 77, 0); }
+  50%      { box-shadow: inset 1px 0 18px rgba(255, 184, 77, .34),
+    0 10px 30px rgba(255, 184, 77, .42), 0 0 14px rgba(255, 214, 140, .25); } }
 #panel-outcome li:not(.dim) .t { color: #ffe9c4; text-shadow: 0 0 14px rgba(255, 184, 77, .6); }
 #panel-outcome li:not(.dim) .t::after { display: inline-block;
   animation: coin-spin 2.8s cubic-bezier(.5, 0, .3, 1) infinite; }
 @keyframes coin-spin { 0% { transform: rotateY(0); } 55%, 100% { transform: rotateY(360deg); } }
 
-/* headline figures on live outcome cards */
-#panel-outcome li .stat { font-size: 23px; font-weight: 800; line-height: 1.15;
-  margin: 3px 0 1px; color: #ffd88f; letter-spacing: .01em;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 20px rgba(255, 184, 77, .5); }
+/* headline figures — molten-gold gradient with a running shine, counter pops */
+#panel-outcome li .stat { font-size: 28px; font-weight: 800; line-height: 1.15;
+  margin: 3px 0 1px; letter-spacing: .01em; font-variant-numeric: tabular-nums;
+  background: linear-gradient(100deg, #ffbe66 15%, #fff3d2 38%, #ffd88f 55%, #ffb84d 80%);
+  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
+  color: transparent; animation: stat-shine 2.4s linear infinite;
+  filter: drop-shadow(0 0 16px rgba(255, 184, 77, .55)); }
+@keyframes stat-shine { from { background-position: 160% 0; } to { background-position: -60% 0; } }
 
 /* trust line at the foot of the OUTCOME panel — why the client should believe */
 #panel-outcome .s-proof { margin-top: 12px; padding-top: 9px; font-size: 10.5px;
@@ -1121,8 +1138,8 @@ const PHASES = [
   { name: "tower", dur: 17000, // EE — the story opens on ONE tower (DBS, Marina Bay)
     enter() {
       map.stop();
-      map.flyTo({ center: DBS_TOWER, zoom: 16.1, pitch: 62, bearing: -35,
-        duration: dur(5000), curve: 1.3, easing: easeInOutCubic });
+      map.flyTo({ center: DBS_TOWER, zoom: 16.1, pitch: 60, bearing: -18,
+        duration: dur(5000), curve: 1.2, easing: easeInOutCubic });
       this._lit = false; this._drift = false; this._c1 = this._c2 = false;
     },
     update(ms, now) {
@@ -1149,7 +1166,7 @@ const PHASES = [
       // barely-there drift: the camera holds, the building is the show
       if (ms > 5600 && !this._drift) {
         this._drift = true;
-        map.easeTo({ bearing: -14, pitch: 60, duration: dur(11000), easing: (t) => t });
+        map.easeTo({ bearing: -14, duration: dur(11000), easing: (t) => t });
       }
       if (ms > 5000 && !this._c1) { this._c1 = true; caption(CAPS.ee1); }
       if (ms > 10600 && !this._c2) { this._c2 = true; caption(CAPS.ee2); }
@@ -1163,7 +1180,7 @@ const PHASES = [
       map.stop();
       $("#bloom-changi").classList.remove("on");
       // gentle pull-back from the DBS close-up — same neighbourhood, no big swing
-      map.easeTo({ center: CBD, zoom: 15.0, pitch: 60, bearing: -28,
+      map.easeTo({ center: CBD, zoom: 15.0, pitch: 60, bearing: -16,
         duration: dur(3800), easing: easeInOutCubic });
       caption("");
       this._lit = false; this._drift = false;
@@ -1196,7 +1213,7 @@ const PHASES = [
       if (ms > 4300 && !this._c1) { this._c1 = true; caption(CAPS.em1); }
       if (ms > 4600 && !this._drift) {
         this._drift = true;
-        map.easeTo({ bearing: -12, duration: dur(9800), easing: (t) => t });
+        map.easeTo({ bearing: -12, duration: dur(9800), easing: (t) => t }); // 4° drift, nothing more
       }
       if (ms > 9600 && !this._c2) { this._c2 = true; caption(CAPS.em2); }
       if (ms > 13600) { captionOut(); loctag(""); }
@@ -1220,12 +1237,13 @@ const PHASES = [
       this._flow = false;
     },
     update(ms, now) {
-      // point → plane: a single wavefront radiates out of the CBD; every asset
-      // ignites the moment the wave reaches it (delay ∝ distance from DBS)
-      if (ms > 2800 && !this._wave) { this._wave = true; spawnWave(CBD); }
+      // point → plane: rings radiate out of DBS — each ring of assets ignites
+      // TOGETHER, then the next ring out, wave after wave
+      if (ms > 2800 && !this._wave) { this._wave = true; spawnWave(DBS_TOWER); }
       ALL_SITES.forEach((s) => {
-        const d = Math.hypot(s.coords[0] - CBD[0], s.coords[1] - CBD[1]);
-        if (ms > 3000 + d * 24000) igniteSite(s.id);
+        const d = Math.hypot(s.coords[0] - DBS_TOWER[0], s.coords[1] - DBS_TOWER[1]);
+        const ring = Math.min(5, Math.floor(d / 0.038));
+        if (ms > 3000 + ring * 950) igniteSite(s.id);
       });
       if (ms > 4400 && !this._c1) { this._c1 = true; caption(CAPS.ioc1);
         loctag("IoC · Integration of Control"); showPanels("ioc"); }
@@ -1263,9 +1281,9 @@ const PHASES = [
   { name: "finale", dur: Infinity,
     enter() {
       map.stop();
-      map.easeTo({ center: [103.8520, 1.3180], zoom: 10.9, pitch: 54, bearing: 40,
+      // steady ending: a barely-perceptible pendulum, never a big swing
+      map.easeTo({ center: [103.8520, 1.3180], zoom: 10.9, pitch: 54, bearing: 2,
         duration: dur(26000), easing: (t) => t });
-      // clean ending: no text overlay, just the living map and a Replay control
       this._timers = [setTimeout(() => $replay.classList.add("in"), 2400)];
       this._swung = false;
     },
@@ -1273,7 +1291,7 @@ const PHASES = [
       tickComet(now);
       if (ms > 26500 && !this._swung) { // keep the world slowly turning forever
         this._swung = true;
-        map.easeTo({ bearing: -20, duration: dur(30000), easing: (t) => t });
+        map.easeTo({ bearing: -8, duration: dur(30000), easing: (t) => t });
       }
       if (ms > 57000) this._swung = false;
     },
