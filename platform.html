@@ -1228,7 +1228,9 @@ function resetView() {
 let lastDeclutter = 0;
 const declutterV = new THREE.Vector3();
 function declutterLabels(now) {
-  if (now - lastDeclutter < 150) return;
+  // during a camera flight the projection changes every frame — check every
+  // frame so a label never balloons across the screen before the throttle wakes
+  if (!flight && now - lastDeclutter < 150) return;
   lastDeclutter = now;
   const fovScale = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   const items = [];
@@ -1243,7 +1245,10 @@ function declutterLabels(now) {
     const h = (b.label.scale.y / dist) * fovScale;
     const w = (b.label.scale.x / dist) * fovScale;
     // a name that would fill the screen is noise, not a label
-    if (h > innerHeight * 0.09 || w > innerWidth * 0.5) { b.labelHidden = true; continue; }
+    if (h > innerHeight * 0.09 || w > innerWidth * 0.5) {
+      b.labelHidden = true; b.labelOversize = true; continue;
+    }
+    b.labelOversize = false;
     items.push({ b, sx, sy, w, h, dist, hero: b.site.tier === "hero" });
   }
   items.sort((a, c) => (a.hero !== c.hero) ? (a.hero ? -1 : 1) : a.dist - c.dist);
@@ -1339,6 +1344,7 @@ function frame() {
     const q = (b.pulse % 2.6) / 2.6;
     b.ring.scale.setScalar((b.site.tier === "hero" ? 240 : 150) * (0.4 + q * 2.6));
     b.ring.material.opacity = REDUCED ? 0 : 0.55 * (1 - q);
+    if (b.labelOversize) { b.label.material.opacity = 0; continue; }  // giant letters: kill instantly
     const want = b.labelHidden ? 0 : 0.95;
     b.label.material.opacity += (want - b.label.material.opacity) * Math.min(1, dt * 8);
   }
