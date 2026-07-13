@@ -546,7 +546,10 @@ const map = new GL.Map({
   pitch: 45,
   bearing: -15,
   antialias: true,
-  interactive: false,
+  // interactive: grabbing the map pauses the tour (enterExplore) and the user
+  // takes the camera; RESUME rebuilds the phase
+  interactive: true,
+  doubleClickZoom: false, // double-click would fight the click-a-building card
   attributionControl: { compact: true },
 });
 
