@@ -55,21 +55,87 @@ canvas { display: block; }
 #chapter b { color: var(--cyan); font-weight: 600; }
 #chapter.in { opacity: .95; transform: translateY(0); }
 
-/* ---- presenter navigation ---- */
+/* ---- product bottom bar: breadcrumb + step controls ---- */
 #nav { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;
-  display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+  display: flex; align-items: center; gap: 14px; padding: 10px 18px;
   background: rgba(8,13,20,.62); border: 1px solid rgba(56,225,214,.22); border-radius: 26px;
   backdrop-filter: blur(10px); opacity: 0; transition: opacity .8s ease; }
 #nav.in { opacity: 1; }
 #nav button { background: none; border: none; color: var(--cyan); font-size: 17px; line-height: 1;
   cursor: pointer; padding: 4px 6px; font-family: inherit; }
 #nav button:disabled { color: rgba(126,147,163,.4); cursor: default; }
-#dots { display: flex; gap: 7px; align-items: center; }
-#dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(126,147,163,.45);
-  transition: background-color .35s ease, box-shadow .35s ease, transform .35s ease;
-  cursor: pointer; }
-#dots i.on { background: var(--cyan); box-shadow: 0 0 8px rgba(56,225,214,.9); transform: scale(1.25); }
-#dots i.seen { background: rgba(56,225,214,.5); }
+#crumb { display: flex; align-items: center; gap: 9px; font-size: 11px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+#crumb b { color: #eaf6f8; font-weight: 600; }
+#crumb .sep { color: rgba(126,147,163,.5); }
+#crumb .step { color: var(--cyan); font-variant-numeric: tabular-nums; }
+#crumb .kbd { border: 1px solid rgba(126,147,163,.4); border-radius: 4px; padding: 1px 6px;
+  font-size: 10px; letter-spacing: .06em; color: var(--muted); text-transform: none; }
+
+/* ---- left rail: product modules + searchable asset tree ---- */
+#rail { position: absolute; top: 96px; left: 22px; bottom: 78px; width: 238px; z-index: 14;
+  display: flex; flex-direction: column;
+  background: rgba(8, 14, 22, .72); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(120, 200, 220, .16); border-radius: 10px; overflow: hidden;
+  opacity: 0; transform: translateX(-12px);
+  transition: opacity .7s cubic-bezier(.23,1,.32,1), transform .7s cubic-bezier(.23,1,.32,1); }
+#rail.in { opacity: 1; transform: translateX(0); }
+#tabs { display: flex; border-bottom: 1px solid rgba(120,200,220,.14); }
+#tabs button { flex: 1; background: none; border: none; padding: 10px 0 9px; cursor: pointer;
+  font-family: inherit; font-size: 10.5px; letter-spacing: .12em; color: var(--muted);
+  border-bottom: 2px solid transparent;
+  transition: color .25s ease, border-color .25s ease; }
+#tabs button:hover { color: #cfe6ea; }
+#tabs button.on { color: var(--cyan); border-bottom-color: var(--cyan); }
+#railsearch { margin: 10px 10px 8px; display: flex; align-items: center; gap: 7px;
+  background: rgba(10,18,28,.8); border: 1px solid rgba(120,200,220,.18); border-radius: 7px;
+  padding: 6px 9px; }
+#railsearch svg { flex: none; opacity: .5; }
+#railsearch input { flex: 1; background: none; border: none; outline: none; color: var(--text);
+  font-family: inherit; font-size: 12px; min-width: 0; }
+#railsearch input::placeholder { color: rgba(126,147,163,.7); }
+#railsearch .kbd { flex: none; border: 1px solid rgba(126,147,163,.35); border-radius: 4px;
+  padding: 1px 5px; font-size: 9.5px; color: var(--muted); }
+#assets { flex: 1; overflow-y: auto; padding: 2px 6px 8px; scrollbar-width: thin;
+  scrollbar-color: rgba(86,225,230,.25) transparent; }
+.asset { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px;
+  cursor: pointer; transition: background-color .2s ease; }
+.asset:hover { background: rgba(56,225,214,.08); }
+.asset.sel { background: rgba(56,225,214,.14); }
+.asset .dot { flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(126,147,163,.5); box-shadow: none;
+  transition: background-color .4s ease, box-shadow .4s ease; }
+.asset.live .dot { background: var(--cyan); box-shadow: 0 0 7px rgba(56,225,214,.9); }
+.asset.amber .dot { background: var(--amber); box-shadow: 0 0 7px rgba(255,184,77,.9); }
+.asset.fault .dot { background: var(--red); box-shadow: 0 0 7px rgba(255,107,93,.9); }
+.asset .nm { flex: 1; font-size: 12px; color: var(--text); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.asset .tag { flex: none; font-size: 8.5px; letter-spacing: .14em; color: var(--muted); }
+.asset.hero .tag { color: rgba(56,225,214,.75); }
+#railempty { padding: 18px 12px; font-size: 11.5px; color: var(--muted); text-align: center; }
+
+/* ---- ⌘K command palette ---- */
+#palette { position: absolute; inset: 0; z-index: 40; display: none;
+  background: rgba(4, 8, 14, .55); backdrop-filter: blur(3px); }
+#palette.open { display: block; }
+#palette .box { position: absolute; left: 50%; top: 18%; transform: translateX(-50%);
+  width: min(520px, 90vw); background: rgba(10, 17, 26, .96); border: 1px solid rgba(120,200,220,.25);
+  border-radius: 12px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  animation: pal-in .18s cubic-bezier(.23,1,.32,1); }
+@keyframes pal-in { from { opacity: 0; transform: translateX(-50%) scale(.97); } }
+#palette input { width: 100%; box-sizing: border-box; background: none; border: none;
+  outline: none; color: var(--text); font-family: inherit; font-size: 15px;
+  padding: 15px 18px; border-bottom: 1px solid rgba(120,200,220,.14); }
+#palette input::placeholder { color: rgba(126,147,163,.7); }
+#palresults { max-height: 46vh; overflow-y: auto; padding: 6px; }
+.palitem { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text); }
+.palitem .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); }
+.palitem.cmd .dot { background: var(--violet); }
+.palitem .tag { margin-left: auto; font-size: 9px; letter-spacing: .14em; color: var(--muted); }
+.palitem.on { background: rgba(56,225,214,.14); }
+#palfoot { padding: 8px 14px; border-top: 1px solid rgba(120,200,220,.12); font-size: 10px;
+  letter-spacing: .08em; color: var(--muted); display: flex; gap: 16px; }
 
 #hint { position: absolute; bottom: 24px; left: 24px; z-index: 10; pointer-events: none;
   font-size: 12px; letter-spacing: .06em; color: rgba(255,255,255,.7);
@@ -181,8 +247,32 @@ canvas { display: block; }
 
 <div id="nav">
   <button id="prev">◀</button>
-  <div id="dots"></div>
+  <div id="crumb"></div>
   <button id="next">▶</button>
+</div>
+
+<aside id="rail">
+  <div id="tabs">
+    <button data-mod="all" class="on">ALL</button>
+    <button data-mod="ee">EE</button>
+    <button data-mod="em">EM</button>
+    <button data-mod="ioc">IoC</button>
+  </div>
+  <div id="railsearch">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7e93a3" stroke-width="2.4">
+      <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="railq" type="text" placeholder="Search assets…" autocomplete="off">
+    <span class="kbd">⌘K</span>
+  </div>
+  <div id="assets"></div>
+</aside>
+
+<div id="palette">
+  <div class="box">
+    <input id="palq" type="text" placeholder="Fly to an asset, switch module, start the tour…" autocomplete="off">
+    <div id="palresults"></div>
+    <div id="palfoot"><span>↑↓ navigate</span><span>↵ go</span><span>esc close</span></div>
+  </div>
 </div>
 
 <div id="finale">
@@ -835,6 +925,8 @@ function goTo(idx, opts = {}) {
   stepIdx = idx;
   const S = STEPS[idx];
 
+  hideAssetCard();          // ad-hoc asset inspection ends when the story moves
+  railSelKey = null;
   chapter(S.chapter);
   updateNav();
 
@@ -876,7 +968,13 @@ function runFlight(now) {
   }
   if (p >= 1) {
     if (!flight.stateApplied) applyState(STEPS[stepIdx].state, flight.forward);
+    const arrive = flight.onArrive;
     flight = null;
+    if (controlsEnabled) {   // explore mode: adopt the landed orientation
+      const e2 = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
+      yaw = e2.y; pitch = e2.x;
+    }
+    arrive?.();
   }
 }
 
@@ -900,26 +998,139 @@ function chapter(html) {
   el.innerHTML = html; el.classList.add("in");
 }
 
-/* nav dots */
-const dotsEl = $("#dots");
-STEPS.forEach((_, i) => {
-  const d = document.createElement("i");
-  d.onclick = (e) => { e.stopPropagation(); if (!flight) goTo(i); };
-  dotsEl.appendChild(d);
-});
+/* ================= PRODUCT CHROME: breadcrumb · rail · palette ================= */
+const MODULE_STEP = { all: 5, ee: 1, em: 4, ioc: 7 };
+const MOD_LABEL = { intro: "Overview", ee: "Energy Efficiency", em: "Energy Management",
+  ioc: "Intelligent Operations · FDD", one: "Run As One", explore: "Explore" };
+function stepModule(i) {
+  return i === 0 ? "intro" : i <= 3 ? "ee" : i <= 6 ? "em" : i <= 10 ? "ioc"
+    : i === 11 ? "one" : "explore";
+}
 function updateNav() {
-  [...dotsEl.children].forEach((d, i) => {
-    d.classList.toggle("on", i === stepIdx);
-    d.classList.toggle("seen", i < stepIdx);
-  });
+  const m = stepModule(stepIdx);
+  $("#crumb").innerHTML = `<b>SINGAPORE TWIN</b><span class="sep">▸</span>` +
+    `${MOD_LABEL[m]}<span class="sep">▸</span>` +
+    `<span class="step">${stepIdx + 1} / ${STEPS.length}</span>` +
+    `<span class="kbd">⌘K</span>`;
+  const tab = m === "ee" || m === "em" || m === "ioc" ? m : "all";
+  document.querySelectorAll("#tabs button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.mod === tab));
   $("#prev").disabled = stepIdx <= 0;
   $("#next").disabled = stepIdx >= STEPS.length - 1;
 }
 $("#prev").onclick = (e) => { e.stopPropagation(); prev(); };
 $("#next").onclick = (e) => { e.stopPropagation(); next(); };
+document.querySelectorAll("#tabs button").forEach((b) => {
+  b.onclick = () => { if (!flight) goTo(MODULE_STEP[b.dataset.mod], { force: true }); };
+});
+
+/* fly the camera to an asset outside the story flow — the map is a product
+   surface, not just a film */
+let railSelKey = null;
+function flyToAsset(key) {
+  const b = byKey[key];
+  if (!b || !revealed) return;
+  if (!b.lit) setLit(b, true, 0);
+  hideAssetCard();
+  const dir = camera.position.clone().sub(b.group.position).setY(0);
+  if (dir.lengthSq() < 1) dir.set(0, 0, 1); else dir.normalize();
+  const toP = b.group.position.clone().add(dir.multiplyScalar(1500)).add(new THREE.Vector3(0, 720, 0));
+  const toL = b.group.position.clone().add(new THREE.Vector3(0, 180, 0));
+  flight = { fromP: curP.clone(), fromL: curL.clone(), toP, toL,
+    t0: performance.now(), dur: 2400, stateApplied: true, forward: false,
+    onArrive: () => showAssetCard(b) };
+  railSelKey = key;
+  refreshRail();
+}
+
+/* left rail: searchable asset tree with live status */
+const assetsEl = $("#assets");
+function buildRail() {
+  const q = $("#railq").value.trim().toLowerCase();
+  const rows = SITES.filter((s) => !q || s.org.toLowerCase().includes(q));
+  assetsEl.innerHTML = rows.length
+    ? rows.map((s) => `<div class="asset ${s.tier}" data-key="${s.key}">
+        <span class="dot"></span><span class="nm">${s.org}</span>
+        <span class="tag">${s.tier === "hero" ? "CLIENT" : "NODE"}</span></div>`).join("")
+    : `<div id="railempty">No assets match</div>`;
+  assetsEl.querySelectorAll(".asset").forEach((el) => {
+    el.onclick = () => flyToAsset(el.dataset.key);
+  });
+  refreshRail();
+}
+function refreshRail() {
+  assetsEl.querySelectorAll(".asset").forEach((el) => {
+    const b = byKey[el.dataset.key];
+    if (!b) return;
+    const faulted = el.dataset.key === "hdb" && currentFDD >= 1 && currentFDD < 4;
+    el.classList.toggle("fault", faulted);
+    el.classList.toggle("amber", !faulted && b.lit && b.site.tone === "amber");
+    el.classList.toggle("live", !faulted && b.lit && b.site.tone !== "amber");
+    el.classList.toggle("sel", el.dataset.key === railSelKey);
+  });
+}
+$("#railq").addEventListener("input", buildRail);
+setInterval(refreshRail, 700);
+buildRail();
+
+/* ⌘K command palette */
+const palEl = $("#palette"), palq = $("#palq"), palRes = $("#palresults");
+let palOpen = false, palSel = 0, palItems = [];
+const PAL_CMDS = [
+  { cmd: true, label: "Start guided tour", tag: "TOUR", run: () => goTo(0, { force: true }) },
+  { cmd: true, label: "Module · Energy Efficiency", tag: "EE", run: () => goTo(1, { force: true }) },
+  { cmd: true, label: "Module · Energy Management", tag: "EM", run: () => goTo(4, { force: true }) },
+  { cmd: true, label: "Module · Intelligent Operations", tag: "IOC", run: () => goTo(7, { force: true }) },
+  { cmd: true, label: "Explore the island", tag: "FLY", run: () => goTo(12, { force: true }) },
+];
+function palRender() {
+  const q = palq.value.trim().toLowerCase();
+  const sites = SITES.filter((s) => !q || s.org.toLowerCase().includes(q))
+    .map((s) => ({ label: s.org, tag: s.tier === "hero" ? "CLIENT" : "NODE",
+      run: () => flyToAsset(s.key) }));
+  const cmds = PAL_CMDS.filter((c) => !q || c.label.toLowerCase().includes(q));
+  palItems = q ? [...sites, ...cmds] : [...cmds, ...sites];
+  palSel = 0;
+  palRes.innerHTML = palItems.map((it, i) =>
+    `<div class="palitem${it.cmd ? " cmd" : ""}${i === 0 ? " on" : ""}" data-i="${i}">
+      <span class="dot"></span>${it.label}<span class="tag">${it.tag}</span></div>`).join("");
+  palRes.querySelectorAll(".palitem").forEach((el) => {
+    el.onclick = () => { palRun(+el.dataset.i); };
+    el.onmousemove = () => { palSel = +el.dataset.i; palHighlight(); };
+  });
+}
+function palHighlight() {
+  palRes.querySelectorAll(".palitem").forEach((el, i) =>
+    el.classList.toggle("on", i === palSel));
+  palRes.querySelector(".palitem.on")?.scrollIntoView({ block: "nearest" });
+}
+function palRun(i) {
+  const it = palItems[i];
+  closePalette();
+  if (it && !flight) it.run();
+  else if (it) { flight.t0 = -1e9; it.run(); }
+}
+function openPalette() {
+  palOpen = true; palEl.classList.add("open");
+  palq.value = ""; palRender();
+  requestAnimationFrame(() => palq.focus());
+}
+function closePalette() {
+  palOpen = false; palEl.classList.remove("open"); palq.blur();
+}
+palq.addEventListener("input", palRender);
+palq.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.code === "ArrowDown") { e.preventDefault(); palSel = Math.min(palItems.length - 1, palSel + 1); palHighlight(); }
+  else if (e.code === "ArrowUp") { e.preventDefault(); palSel = Math.max(0, palSel - 1); palHighlight(); }
+  else if (e.code === "Enter") { e.preventDefault(); palRun(palSel); }
+  else if (e.code === "Escape") { closePalette(); }
+});
+palEl.addEventListener("pointerdown", (e) => { if (e.target === palEl) closePalette(); });
 
 function beginShow() {
   $("#nav").classList.add("in");
+  $("#rail").classList.add("in");
   goTo(0, { instant: true, force: true });
 }
 
@@ -935,6 +1146,16 @@ function syncCameraRotation() {
 }
 
 addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.code === "KeyK") {
+    e.preventDefault();
+    palOpen ? closePalette() : openPalette();
+    return;
+  }
+  if (e.target && e.target.tagName === "INPUT") {   // typing in search ≠ flying
+    if (e.code === "Escape") e.target.blur();
+    return;
+  }
+  if (palOpen) { if (e.code === "Escape") closePalette(); return; }
   if (e.repeat) return;
   if (e.code === "ArrowRight" || e.code === "Space" || e.code === "PageDown") { e.preventDefault(); next(); return; }
   if (e.code === "ArrowLeft" || e.code === "PageUp") { e.preventDefault(); prev(); return; }
