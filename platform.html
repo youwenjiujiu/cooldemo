@@ -263,25 +263,96 @@ tiles.addEventListener("load-model", ({ scene: tileScene }) => {
 /* ---- loading gate: reveal only when the opening shot is fully streamed ---- */
 let tilesReady = false, tilesBusy = true, revealed = false;
 const bootTime = performance.now();
-tiles.addEventListener("load-tile-set", () => { tilesReady = true; });
+// "load-tile-set" fires even when the request fails, so it can't prove the base
+// works — only a successfully parsed tile model can
+tiles.addEventListener("load-model", () => { tilesReady = true; });
 tiles.addEventListener("tiles-load-start", () => { tilesBusy = true; });
 tiles.addEventListener("tiles-load-end", () => { tilesBusy = false; });
 
 function updateLoadingGate(now) {
   if (revealed) return;
   const elapsed = now - bootTime;
-  const prog = typeof tiles.loadProgress === "number" ? tiles.loadProgress
-    : (tilesReady ? (tilesBusy ? 0.6 : 1) : 0.15);
+  // Google tiles unreachable (e.g. mainland China): switch base after 12s
+  if (!fallbackActive && !tilesReady && elapsed > 12000) activateFallback();
+  const prog = fallbackActive
+    ? (fallbackTotal ? fallbackLoaded / fallbackTotal : 0.2)
+    : (typeof tiles.loadProgress === "number" ? tiles.loadProgress
+      : (tilesReady ? (tilesBusy ? 0.6 : 1) : 0.15));
   document.getElementById("loadbar").style.width =
     Math.round(Math.min(prog, elapsed / 20000 + 0.2) * 100) + "%";
-  const settled = tilesReady && !tilesBusy && elapsed > 3500;
-  const timeout = elapsed > 25000 && tilesReady;   // never trap the presenter
+  const settled = (tilesReady && !tilesBusy && elapsed > 3500)
+    || (fallbackActive && fallbackTotal > 0 && fallbackLoaded >= fallbackTotal * 0.92);
+  const timeout = elapsed > 32000;   // never trap the presenter
   if (settled || timeout) {
     revealed = true;
     document.getElementById("loadbar").style.width = "100%";
     document.getElementById("loading").classList.add("done");
     beginShow();
   }
+}
+
+/* ---- satellite fallback base: for networks where Google tiles are unreachable
+   (e.g. mainland China) swap to Esri World Imagery draped flat — same story,
+   real satellite ground ---- */
+let fallbackActive = false, fallbackLoaded = 0, fallbackTotal = 0;
+const fallbackGroup = new THREE.Group();
+
+function lngLatToTileF(lng, lat, z) {
+  const n = 2 ** z;
+  return { x: (lng + 180) / 360 * n,
+    y: (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n };
+}
+function tileToLngLat(x, y, z) {
+  const n = 2 ** z;
+  return { lng: x / n * 360 - 180,
+    lat: Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI };
+}
+function addTileRegion(z, lngMin, latMin, lngMax, latMax, yLift) {
+  const texLoader = new THREE.TextureLoader();
+  texLoader.setCrossOrigin("anonymous");
+  const a = lngLatToTileF(lngMin, latMax, z), b = lngLatToTileF(lngMax, latMin, z);
+  for (let tx = Math.floor(a.x); tx <= Math.floor(b.x); tx++) {
+    for (let ty = Math.floor(a.y); ty <= Math.floor(b.y); ty++) {
+      fallbackTotal++;
+      const nw = tileToLngLat(tx, ty, z), se = tileToLngLat(tx + 1, ty + 1, z);
+      const p1 = toLocal(nw.lng, nw.lat), p2 = toLocal(se.lng, se.lat);
+      texLoader.load(
+        `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${tx}`,
+        (tex) => {
+          tex.anisotropy = MAX_ANISO;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          const m = new THREE.Mesh(
+            new THREE.PlaneGeometry(p2.x - p1.x, p2.z - p1.z),
+            new THREE.MeshBasicMaterial({ map: tex }));
+          m.rotation.x = -Math.PI / 2;
+          m.position.set((p1.x + p2.x) / 2, yLift, (p1.z + p2.z) / 2);
+          fallbackGroup.add(m);
+          fallbackLoaded++;
+        },
+        undefined,
+        () => { fallbackLoaded++; });   // count failures too, never stall the gate
+    }
+  }
+}
+function activateFallback() {
+  if (fallbackActive || tilesReady) return;
+  fallbackActive = true;
+  scene.remove(tiles.group);
+  scene.add(fallbackGroup);
+  document.getElementById("loadmsg").textContent = "Streaming satellite imagery…";
+  // sea-coloured backstop so the imagery never ends against bare sky
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(900000, 900000),
+    new THREE.MeshBasicMaterial({ color: 0x3d6b80 }));
+  sea.rotation.x = -Math.PI / 2; sea.position.y = -6;
+  fallbackGroup.add(sea);
+  // low-res context ring around the island…
+  addTileRegion(11, 102.90, 0.72, 104.80, 1.95, -3);
+  // …the island itself…
+  addTileRegion(13, 103.58, 1.13, 104.10, 1.49, 0);
+  // …plus hi-res patches under the story's close-up shots
+  addTileRegion(16, 103.9865 - 0.018, 1.3644 - 0.014, 103.9865 + 0.018, 1.3644 + 0.014, 2); // Changi
+  addTileRegion(16, 103.8500 - 0.018, 1.2825 - 0.014, 103.8500 + 0.018, 1.2825 + 0.014, 2); // CBD
+  addTileRegion(16, 103.8490 - 0.014, 1.3330 - 0.011, 103.8490 + 0.014, 1.3330 + 0.011, 2); // HDB
 }
 
 /* ================= BEACONS ================= */
@@ -357,7 +428,7 @@ function settleBeacons() {
     if (hit) { b.group.position.y = hit.point.y - 8; b.grounded = true; }
   }
 }
-setInterval(() => { if (tilesReady) settleBeacons(); }, 2500);
+setInterval(() => { if (tilesReady && !fallbackActive) settleBeacons(); }, 2500);
 
 /* ---- island-wide mesh network ---- */
 const MESH_EDGES = (() => {
@@ -890,6 +961,10 @@ function altitudeGuard(now) {
   guardRay.set(camera.position.clone().add(new THREE.Vector3(0, 3000, 0)),
     new THREE.Vector3(0, -1, 0));
   guardRay.far = 100000;
+  if (fallbackActive) {                       // flat satellite ground sits at y≈0
+    if (camera.position.y < 60) camera.position.y = 60;
+    return;
+  }
   const hit = guardRay.intersectObject(tiles.group, true)[0];
   if (hit && camera.position.y < hit.point.y + 40) {
     camera.position.y = hit.point.y + 40;
@@ -956,10 +1031,13 @@ function frame() {
   if (outcomeEl) pinCard(outcomeEl, CHANGI_P.clone().add(new THREE.Vector3(0, 460, 0)));
 
   camera.updateMatrixWorld();
-  tiles.setResolutionFromRenderer(camera, renderer);
-  tiles.update();
+  if (!fallbackActive) {
+    tiles.setResolutionFromRenderer(camera, renderer);
+    tiles.update();
+  }
   renderer.render(scene, camera);
-  window.__dbg = { revealed, stepIdx, flying: !!flight, cam: camera.position.toArray().map(Math.round) };
+  window.__dbg = { revealed, stepIdx, flying: !!flight, fallbackActive, fallbackLoaded, fallbackTotal,
+    tilesReady, tilesBusy, cam: camera.position.toArray().map(Math.round) };
 }
 frame();
 window.__next = next; window.__prev = prev; window.__goTo = goTo;
