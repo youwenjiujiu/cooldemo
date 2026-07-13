@@ -1,3 +1,9 @@
+# local tokens — never commit
+# Mapbox: copy config.example.js to config.js and fill in
+config.js
+# Cesium ion token for twin.html
+keys.js
+
 # Unreal — generated/downloaded, never commit
 unreal/Plugins/
 unreal/Binaries/
@@ -7,4 +13,3 @@ unreal/Saved/
 unreal/Content/**/*.uasset
 unreal/Content/**/*.umap
 unreal/keys.json
-keys.js
